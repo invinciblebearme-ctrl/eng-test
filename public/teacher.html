@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>교사용 · 2학기 영어 채점</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="/style.css">
+<script src="/xlsx.js" defer></script>
+<script src="/qr.js"></script>
+</head>
+<body>
+<header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
+  <div class="tabs" id="nav" hidden><button class="tab on" data-v="grades">채점·성적</button><button class="tab" data-v="roster">명렬표</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="links">🔓 시험 열기·링크</button></div>
+  <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
+<main class="wrap" id="app"></main>
+<div id="modal"></div>
+<div id="printArea" class="result"></div>
+<script src="/common.js"></script>
+<script>
+const app = $('#app');
+const LS = 'eng4-teacher';
+let GROUP = localStorage.getItem('eng4-grp') || 'concept', UNITF = localStorage.getItem('eng4-unitf') || 'all', RSUB = 'list', KEYSEL = null;
+let GRADE = +(localStorage.getItem('eng4-grade') || 4), CLASS_COUNT = { 3: 7, 4: 6 };
+let TOKEN = localStorage.getItem(LS), KEY = null, CLS = +(localStorage.getItem('eng4-cls') || 1), VIEW = 'grades', timer = null;
+const T = (path, body) => api(path, body, TOKEN).catch((e) => { if (e.status === 401) { logout(); } throw e; });
+
+function logout() { localStorage.removeItem(LS); TOKEN = null; $('#nav').hidden = true; $('#out').hidden = true; login(); }
+$('#out').onclick = logout;
+$('#nav').onclick = (e) => { const v = e.target.dataset.v; if (v) go(v); };
+
+function login(msg) {
+  app.innerHTML = `<div class="center-screen"><h2>교사 로그인</h2><p class="lead">3·4학년 2학기 영어 채점</p>
+  <form id="f" class="card"><label class="small muted">교사 비밀번호</label>
+    <input type="password" id="pw" class="field" autofocus style="width:100%;font-size:19px;margin:4px 0 14px">
+    ${msg ? `<div class="notice">${esc(msg)}</div>` : ''}
+    <button class="btn pri" style="width:100%;margin-top:6px">들어가기</button></form></div>`;
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault();
+    try { TOKEN = (await api('/api/teacher/login', { password: $('#pw').value })).token; localStorage.setItem(LS, TOKEN); boot(); }
+    catch (err) { login(err.message); }
+  };
+}
+async function boot() {
+  MEDIA_TOKEN = TOKEN;
+  try { KEY = (await T('/api/t/key')).concepts;
+    try { for (const v of Object.values((await T('/api/t/roster-check')).classes)) CLASS_COUNT[v.grade] = Math.max(CLASS_COUNT[v.grade] || 0, v.class_no); } catch {} } catch (e) { if (e.status !== 401) app.innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  await loadClosed();
+  $('#nav').hidden = false; $('#out').hidden = false; go('grades');
+}
+function go(v) {
+  VIEW = v; clearInterval(timer);
+  document.querySelectorAll('#nav .tab').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  ({ grades, roster, key: keyView, links: linksView })[v]();
+}
+const KORD = { concept: 0, word: 1, spelltest: 2, exam: 3 }, unitNo = (c) => (c.kind === 'concept' ? 0 : parseInt(c.unit, 10) || 99);
+const KG = () => KEY.filter((c) => c.grade === GRADE).sort((a, b) => (a.kind === 'concept') - (b.kind === 'concept') ? (b.kind === 'concept') - (a.kind === 'concept') : unitNo(a) - unitNo(b) || KORD[a.kind] - KORD[b.kind] || a.id - b.id);
+const gradeTabs = () => `<div class="tabs seg">${[3, 4].map((g) => `<button class="tab ${g === GRADE ? 'on' : ''}" data-grade="${g}">${g}학년</button>`).join('')}</div>`;
+const clsTabs = (cur) => `<div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs">${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === cur ? 'on' : ''}" data-cls="${n}">${n}반</button>`).join('')}</div></div>`;
+function bindCls(fn) {
+  app.querySelectorAll('[data-cls]').forEach((b) => (b.onclick = () => { CLS = +b.dataset.cls; localStorage.setItem('eng4-cls', CLS); fn(); }));
+  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); if (CLS > (CLASS_COUNT[GRADE] || 6)) CLS = 1; fn(); }));
+}
+
+// ---------------- 채점·성적 ----------------
+async function grades() {
+  app.innerHTML = `${clsTabs(CLS)}<div id="gx"><p class="muted">불러오는 중…</p></div>`;
+  bindCls(grades);
+  await drawGrades();
+  timer = setInterval(() => { if (!$('#modal').innerHTML) drawGrades(true); }, 30000);
+}
+let DRAW_SEQ = 0;   // 늦게 도착한 이전 학년·반 응답이 화면을 덮어쓰지 않게
+async function drawGrades(quiet) {
+  let d; const my = ++DRAW_SEQ;
+  try { d = await T(`/api/t/overview?grade=${GRADE}&class=${CLS}`); } catch (e) { if (!quiet) $('#gx').innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  const gx = $('#gx'); if (!gx || my !== DRAW_SEQ) return;
+  const by = {}; d.submissions.forEach((s) => (by[s.student_id + ':' + s.concept] = s));
+  const hby = {}; (d.history || []).forEach((h) => (hby[h.student_id + ':' + h.concept] = hby[h.student_id + ':' + h.concept] || []).push(h));
+  const histTip = (sid, cid) => (hby[sid + ':' + cid] || []).map((h) => `${h.attempt}차 ${h.score}점`).join(', ');
+  const waiting = d.submissions.filter((s) => s.status !== 'graded').length;
+  // AI 채점 대상: 채점 대기 중, AI 아직 안 함, 10점 만점이 아닌 것
+  const totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
+  const aiTodo = d.submissions.filter((s) => s.status !== 'graded' && !s.ai && s.score < totalOf(s.concept));
+  if (!d.students.length) { gx.innerHTML = `<div class="notice">${GRADE}학년 ${CLS}반 명렬표가 없어요. <b>명렬표</b> 탭에서 파일을 올려 주세요.</div>`; return; }
+  const hasConcepts = KG().some((c) => c.kind === 'concept'); const grp = hasConcepts ? GROUP : 'unit';
+  // 단원 평가는 단원별로 골라 보기
+  const units = [...new Map(KG().filter((c) => c.kind !== 'concept').map((c) => [c.ukey, c.unit])).entries()];
+  const uf = grp === 'unit' && units.some(([k]) => k === UNITF) ? UNITF : 'all';
+  const ids = KG().filter((c) => (grp === 'unit' ? c.kind !== 'concept' && (uf === 'all' || c.ukey === uf) : c.kind === 'concept')).map((c) => c.id);
+  const avg = ids.map((cid) => { const xs = d.students.map((s) => by[s.id + ':' + cid]).filter(Boolean); return xs.length ? (xs.reduce((a, b) => a + b.score, 0) / xs.length).toFixed(1) : '-'; });
+  const cnt = ids.map((cid) => d.students.filter((s) => by[s.id + ':' + cid]).length);
+  const subsIn = d.submissions.filter((x) => ids.includes(x.concept));
+  const rate = subsIn.length ? Math.round(subsIn.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / subsIn.length * 100) + '%' : '-';
+  const kindIcon = { word: '🔤', spelltest: '✍️', exam: '📝', concept: '' };
+  gx.innerHTML = `
+  <div class="stats">
+    <div class="stat"><b>${d.students.length}</b><span>학생</span></div>
+    <div class="stat ${waiting ? 'warn' : ''}"><b>${waiting}</b><span>채점 대기</span></div>
+    <div class="stat"><b>${subsIn.length}</b><span>제출 (보이는 시험)</span></div>
+    <div class="stat"><b>${rate}</b><span>정답률</span></div>
+  </div>
+  <div class="bar view">
+    ${hasConcepts ? `<div class="tabs seg"><button class="tab ${grp !== 'unit' ? 'on' : ''}" data-grp="concept">📘 기본 개념</button><button class="tab ${grp === 'unit' ? 'on' : ''}" data-grp="unit">📝 단원 평가</button></div>` : ''}
+    ${grp === 'unit' ? `<div class="tabs ufc"><button class="tab ${uf === 'all' ? 'on' : ''}" data-uf="all">전체</button>${units.map(([k, u]) => `<button class="tab ${uf === k ? 'on' : ''}" data-uf="${k}">${esc(u)}</button>`).join('')}</div>` : ''}
+  </div>
+  <div class="bar actions">
+    <button class="btn sm pri" id="confirmAll" ${waiting ? '' : 'disabled'}>✔ 대기 ${waiting}건 확정</button>
+    <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length})</button><span id="aiProg" class="small"></span>
+    <button class="btn sm" id="reissue">🔁 재출제</button>
+    <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
+    <span style="flex:1"></span>
+    <button class="btn sm" id="bulkPrint">🖨 결과 출력</button>
+    <button class="btn sm ghost" id="csv">⬇ CSV</button><button class="btn sm ghost" id="rf">↻ 새로고침</button>
+  </div>
+  <div class="mxwrap"><table class="mx"><thead><tr><th>번호</th><th>이름</th>${ids.map((i) => { const c = KEY.find((x) => x.id === i); return `<th title="${esc(c.title)} (${c.questions.length}문제)${CLOSED.has(i) ? ' · 닫힘' : ''}" class="${CLOSED.has(i) ? 'muted' : ''}">${CLOSED.has(i) ? '🔒' : kindIcon[c.kind]}${esc(c.short)}</th>`; }).join('')}<th>제출</th><th>정답률</th></tr></thead><tbody>
+  ${d.students.map((s) => {
+    const mine = ids.map((cid) => by[s.id + ':' + cid]);
+    const got = mine.filter(Boolean);
+    return `<tr><td>${s.number}</td><td class="nm">${esc(s.name)}</td>${mine.map((x, k) => x
+      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup>🤖</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
+      : hby[s.id + ':' + ids[k]] ? `<td class="muted" title="이전: ${histTip(s.id, ids[k])}">🔁</td>` : `<td class="muted">·</td>`).join('')}<td>${got.length}</td><td>${got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) + '%' : '-'}</td></tr>`;
+  }).join('')}
+  <tr class="avg"><td></td><td class="nm">반 평균</td>${avg.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr>
+  <tr class="avg"><td></td><td class="nm">제출 인원</td>${cnt.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr></tbody></table></div>
+  <details class="help"><summary>ⓘ 표 보는 법</summary><p class="small">칸을 누르면 학생 답을 보고 O/X를 고칠 수 있어요. <span class="badge wait">노랑</span> 채점 대기(숫자 뒤 ?) · <span class="badge ok">초록</span> 확정 80% 이상 · <span class="badge no">빨강</span> 확정 80% 미만 · 🤖 AI 채점함 · <b>2차</b> 재출제 후 다시 푼 결과(칸에 마우스를 올리면 이전 점수) · 🔁 재출제되어 아직 다시 안 푼 학생. 학생은 선생님이 확정한 뒤에 결과를 볼 수 있어요. 🔤 단어 시험 · ✍️ 철자 시험 · 📝 단원평가</p></details>`;
+  gx.querySelectorAll('[data-sub]').forEach((td) => (td.onclick = () => openSub(+td.dataset.sub)));
+  $('#regrade').onclick = async () => { const r = await T('/api/t/regrade', { grade: GRADE }); toast(`${GRADE}학년 답 ${r.checked}건 확인, ${r.changed}건 다시 채점했어요`); drawGrades(); };
+  gx.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => { GROUP = b.dataset.grp; localStorage.setItem('eng4-grp', GROUP); drawGrades(); }));
+  gx.querySelectorAll('[data-uf]').forEach((b) => (b.onclick = () => { UNITF = b.dataset.uf; localStorage.setItem('eng4-unitf', UNITF); drawGrades(); }));
+  $('#rf').onclick = () => drawGrades();
+  $('#csv').onclick = () => downloadCSV(d, by);
+  $('#bulkPrint').onclick = () => openPrintPanel(ids);
+  $('#reissue').onclick = () => openReissue(ids, d, by);
+  $('#aiAll').onclick = async () => {
+    if (!aiTodo.length) return toast('AI로 채점할 답이 없어요');
+    if (!confirm(`채점 대기 중인 ${aiTodo.length}건을 AI로 채점할까요?\n자동 채점에서 X가 나온 답만 AI에게 보내고, AI가 인정한 답은 O로 '제안'만 해요.\n학생에게는 선생님이 확정해야 공개돼요.`)) return;
+    $('#aiAll').disabled = true; let ok = 0, bad = 0;
+    for (const [k, x] of aiTodo.entries()) {
+      $('#aiProg').textContent = ` 🤖 ${k + 1}/${aiTodo.length} 채점 중…`;
+      try { await T('/api/t/ai-grade', { id: x.id }); ok++; } catch (e) { bad++; if (bad === 1) alert(e.message); if (e.status === 503 || e.status === 401) break; }
+    }
+    toast(`AI 채점 ${ok}건 완료${bad ? `, 실패 ${bad}건` : ''}`); drawGrades();
+  };
+  $('#confirmAll').onclick = async () => {
+    if (!confirm(`${GRADE}학년 ${CLS}반 채점 대기 ${waiting}건을 자동 채점 결과 그대로 확정할까요?\n확정하면 학생이 결과를 볼 수 있어요.`)) return;
+    const r = await T('/api/t/confirm-all', { grade: GRADE, class: CLS }); toast(`${r.count}건 확정했어요`); drawGrades();
+  };
+}
+function downloadCSV(d, by) {
+  const ids = KG().map((c) => c.id), totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
+  const rows = [['학년', '반', '번호', '이름', ...KG().map((c) => `${c.short}(${c.questions.length})`), '제출 수', '정답률(%)']];
+  d.students.forEach((s) => {
+    const sc = ids.map((cid) => { const x = by[s.id + ':' + cid]; return x ? x.score + (x.status !== 'graded' ? '(대기)' : '') : ''; });
+    const got = ids.map((cid) => by[s.id + ':' + cid]).filter(Boolean);
+    rows.push([GRADE, CLS, s.number, s.name, ...sc, got.length, got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) : '']);
+  });
+  const csv = '﻿' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `${GRADE}학년${CLS}반_영어_성적.csv`; a.click();
+}
+
+async function openSub(id) {
+  const m = $('#modal');
+  m.innerHTML = '<div class="modal"><div class="box"><p class="muted">불러오는 중…</p></div></div>';
+  let d; try { d = await T('/api/t/submission?id=' + id); } catch (e) { m.innerHTML = ''; alert(e.message); return; }
+  const s = d.submission, c = KEY.find((x) => x.id === s.concept);
+  const marks = c.questions.map((_, i) => (s.overrides && s.overrides[i] != null ? s.overrides[i] : s.auto[i]));
+  const draw = () => {
+    const score = marks.filter(Boolean).length;
+    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${d.student.grade}학년 ${d.student.class_no}반 ${d.student.number}번 ${esc(d.student.name)} · ${qLabel(c)} ${esc(c.title)}</b><button class="btn sm" id="x">닫기</button></div>
+      <p class="small muted">제출: ${new Date(s.submitted_at).toLocaleString('ko-KR')} · 상태: ${s.status === 'graded' ? '<b style="color:var(--ok)">확정됨</b>' : '<b style="color:var(--wait)">채점 대기</b>'}</p>
+      <div class="gr h"><div>#</div><div>문제</div><div>학생 답</div><div>정답</div><div>채점</div></div>
+      ${c.questions.map((q, i) => `<div class="gr"><div><b>${i + 1}</b></div><div class="small">${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(🔊 ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}</div>
+        <div class="stu">${optLabel(answerToText(q, s.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
+        <div><div class="ox"><button class="o ${marks[i] ? 'on' : ''}" data-i="${i}" data-v="1">O</button><button class="x ${!marks[i] ? 'on' : ''}" data-i="${i}" data-v="0">X</button></div>
+        <div class="auto">자동: ${s.auto[i] ? 'O' : 'X'}${marks[i] !== s.auto[i] ? ' → 수정함' : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}</div>` : ''}`).join('')}
+      <h3>점수: ${score} / ${c.questions.length}${(s.attempt || 1) > 1 ? ` <span class="badge">${s.attempt}차</span>` : ''}</h3>
+      ${(d.history || []).length ? `<details class="help" open><summary>📚 이전 기록 ${d.history.length}개</summary><table class="plain small" style="margin-top:6px"><tr><th>차수</th><th>점수</th><th>문항별 (O/X)</th><th>채점일</th></tr>${d.history.map((h) => `<tr><td>${h.attempt}차</td><td><b>${h.score}</b> / ${c.questions.length}</td><td style="font-family:monospace">${h.marks.map((mk, i) => `<span style="color:${mk ? 'var(--ok)' : 'var(--no)'}" title="${i + 1}번">${mk ? 'O' : 'X'}</span>`).join('')}</td><td>${fmtDate(h.graded_at) || '채점 전'}</td></tr>`).join('')}</table></details>` : ''}
+      <label class="small muted">학생에게 남길 말 (선택)</label><textarea id="fbk" placeholder="예: 요일 첫 글자는 대문자로 써요!">${esc(s.feedback || '')}</textarea>
+      <div class="bar"><button class="btn pri" id="ok">채점 확정 (학생에게 결과 공개)</button><button class="btn" id="save">저장만 (채점 대기 유지)</button><button class="btn" id="aiOne">🤖 AI 채점</button><span style="flex:1"></span><button class="btn" id="redo">🔁 다시 풀게 하기 (기록 남김)</button><button class="btn sm danger" id="reset" title="기록 없이 이 답을 완전히 지워요">완전 삭제</button></div>
+    </div></div>`;
+    m.querySelectorAll('.ox button').forEach((b) => (b.onclick = () => { s.feedback = $('#fbk').value; marks[+b.dataset.i] = b.dataset.v === '1'; draw(); }));
+    $('#x').onclick = close;
+    $('#bg').onclick = (e) => { if (e.target.id === 'bg') close(); };
+    const save = async (status) => {
+      const overrides = {}; marks.forEach((v, i) => { if (v !== s.auto[i]) overrides[i] = v; });
+      await T('/api/t/grade', { id, overrides, feedback: $('#fbk').value, status });
+      toast(status === 'graded' ? '확정했어요' : '저장했어요'); close();
+    };
+    $('#ok').onclick = () => save('graded');
+    $('#save').onclick = () => save('submitted');
+    $('#aiOne').onclick = async () => {
+      $('#aiOne').disabled = true; $('#aiOne').textContent = '🤖 채점 중…';
+      try {
+        const r = await T('/api/t/ai-grade', { id });
+        s.ai = r.ai; s.overrides = r.overrides; s.feedback = $('#fbk').value;
+        c.questions.forEach((_, i) => (marks[i] = r.overrides[i] != null ? r.overrides[i] : s.auto[i]));
+        draw(); toast('AI 제안을 반영했어요. 확인 후 확정하세요');
+      } catch (e) { alert(e.message); draw(); }
+    };
+    $('#redo').onclick = async () => { if (!confirm('이 답은 이전 기록으로 남기고, 같은 시험을 다시 풀게 할까요?')) return; await T('/api/t/reissue', { id, open: true }); await loadClosed(); toast('재출제했어요 (이전 기록 보관)'); close(); };
+    $('#reset').onclick = async () => { if (!confirm('기록을 남기지 않고 이 답을 완전히 지울까요? 되돌릴 수 없어요.')) return; await T('/api/t/reset', { id }); toast('삭제했어요'); close(); };
+  };
+  const close = () => { m.innerHTML = ''; if (VIEW === 'grades') drawGrades(); };
+  draw();
+}
+
+// ---------------- 재출제 ----------------
+function openReissue(visibleIds, d, by) {
+  const m = $('#modal'), totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
+  const sets = KG().filter((c) => d.students.some((st) => by[st.id + ':' + c.id]));
+  if (!sets.length) return alert('이 반에서 제출된 시험이 아직 없어요.');
+  let cid = (sets.find((c) => visibleIds.includes(c.id)) || sets[0]).id;
+  const sel = new Set();
+  const draw = () => {
+    const c = KEY.find((x) => x.id === cid), n = totalOf(cid);
+    const subs = d.students.map((st) => ({ st, x: by[st.id + ':' + cid] })).filter((r) => r.x);
+    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🔁 ${GRADE}학년 ${CLS}반 재출제</b><button class="btn sm" id="x">닫기</button></div>
+      <p class="small muted">고른 학생의 지금 답과 점수는 <b>이전 기록(1차, 2차…)</b>으로 남기고, 같은 시험을 처음부터 다시 풀게 해요.</p>
+      <label class="small muted">시험</label>
+      <select id="rsSet" class="field" style="width:100%;margin:4px 0 12px">${sets.map((x) => `<option value="${x.id}" ${x.id === cid ? 'selected' : ''}>${esc(qLabel(x))} · ${esc(x.title)} (${d.students.filter((st) => by[st.id + ':' + x.id]).length}명 제출)</option>`).join('')}</select>
+      <div class="bar" style="margin:0 0 6px"><b style="flex:1">학생 (${sel.size}/${subs.length})</b>
+        <button class="btn sm" data-pick="all">제출한 학생 전체</button><button class="btn sm" data-pick="low">80% 미만만</button><button class="btn sm ghost" data-pick="none">선택 해제</button></div>
+      <div class="pplist">${subs.map(({ st, x }) => `<label><input type="checkbox" data-rs="${st.id}" ${sel.has(st.id) ? 'checked' : ''}> ${st.number}. ${esc(st.name)} — <b>${x.score}</b>/${n}${x.status !== 'graded' ? ' <span class="small" style="color:var(--wait)">채점 대기</span>' : ''}${x.attempt > 1 ? ` <span class="small muted">(${x.attempt}차)</span>` : ''}</label>`).join('')}</div>
+      <div class="bar"><label><input type="checkbox" id="rsOpen" checked> 시험이 닫혀 있으면 함께 열기</label></div>
+      <div class="bar"><span class="small muted">학생이 다시 풀면 성적표에 <b>2차</b>로 표시되고, 이전 점수도 함께 볼 수 있어요.</span><span style="flex:1"></span><button class="btn pri" id="rsGo" ${sel.size ? '' : 'disabled'}>🔁 ${sel.size}명 재출제</button></div>
+    </div></div>`;
+    $('#rsSet').onchange = () => { cid = +$('#rsSet').value; sel.clear(); draw(); };
+    m.querySelectorAll('[data-rs]').forEach((x) => (x.onchange = () => { x.checked ? sel.add(+x.dataset.rs) : sel.delete(+x.dataset.rs); draw(); }));
+    m.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => {
+      sel.clear();
+      if (b.dataset.pick === 'all') subs.forEach(({ st }) => sel.add(st.id));
+      if (b.dataset.pick === 'low') subs.forEach(({ st, x }) => x.score < n * 0.8 && sel.add(st.id));
+      draw();
+    }));
+    $('#x').onclick = () => (m.innerHTML = '');
+    $('#bg').onclick = (e) => { if (e.target.id === 'bg') m.innerHTML = ''; };
+    $('#rsGo').onclick = async () => {
+      if (!confirm(`${c.title}\n${sel.size}명에게 다시 풀게 할까요? 지금 결과는 이전 기록으로 남아요.`)) return;
+      const r = await T('/api/t/reissue', { concept: cid, student_ids: [...sel], open: $('#rsOpen').checked });
+      if ($('#rsOpen').checked) await loadClosed();
+      m.innerHTML = ''; toast(`${r.count}명 재출제했어요`); drawGrades();
+    };
+  };
+  draw();
+}
+
+// ---------------- 결과 일괄 출력 ----------------
+async function openPrintPanel(visibleIds) {
+  const m = $('#modal');
+  m.innerHTML = '<div class="modal"><div class="box"><p class="muted">불러오는 중…</p></div></div>';
+  let d; try { d = await T(`/api/t/report?grade=${GRADE}&class=${CLS}`); } catch (e) { m.innerHTML = ''; alert(e.message); return; }
+  const hby = {}; (d.history || []).forEach((h) => (hby[h.student_id + ':' + h.concept] = hby[h.student_id + ':' + h.concept] || []).push(h));
+  const sets = KG(), has = {};
+  d.submissions.forEach((x) => (has[x.student_id + ':' + x.concept] = x));
+  const cntOf = (cid) => d.students.filter((st) => has[st.id + ':' + cid]).length;
+  const selSt = new Set(d.students.map((st) => st.id));
+  const selSet = new Set(visibleIds.filter((cid) => cntOf(cid)));
+  const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+  const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  const draw = () => {
+    const onlyGraded = $('#pgOnly') ? $('#pgOnly').checked : true, detail = $('#pgDetail') ? $('#pgDetail').checked : true;
+    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🖨 ${GRADE}학년 ${CLS}반 결과 출력</b><button class="btn sm" id="x">닫기</button></div>
+      <div class="pp">
+        <div><div class="bar" style="margin:0 0 6px"><b style="flex:1">학생 (${selSt.size}/${d.students.length})</b><button class="btn sm" id="stAll">전체 선택</button><button class="btn sm ghost" id="stNone">선택 해제</button></div>
+          <div class="pplist">${d.students.map((st) => { const n = sets.filter((c) => has[st.id + ':' + c.id]).length; return `<label><input type="checkbox" data-st="${st.id}" ${selSt.has(st.id) ? 'checked' : ''}> ${st.number}. ${esc(st.name)} <span class="muted small">(${n})</span></label>`; }).join('')}</div></div>
+        <div><div class="bar" style="margin:0 0 6px"><b style="flex:1">시험 (${selSet.size})</b><button class="btn sm" id="ssAll">제출 있는 것 전체</button><button class="btn sm ghost" id="ssNone">선택 해제</button></div>
+          <div class="pplist">${groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((c) => { const n = cntOf(c.id); return `<label class="${n ? '' : 'muted'}"><input type="checkbox" data-set="${c.id}" ${selSet.has(c.id) ? 'checked' : ''} ${n ? '' : 'disabled'}> ${c.kind === 'concept' ? `${c.id}. ${esc(c.title)}` : kindName[c.kind]} <span class="small muted">(${n}명 제출)</span></label>`; }).join('')}`).join('')}</div></div>
+      </div>
+      <div class="bar"><label><input type="checkbox" id="pgOnly" ${onlyGraded ? 'checked' : ''}> 채점 확정된 결과만</label>
+        <label><input type="checkbox" id="pgDetail" ${detail ? 'checked' : ''}> 문제별 자세히 (끄면 점수표만)</label></div>
+      <div class="bar"><span id="pgInfo" class="small muted"></span><span style="flex:1"></span><button class="btn pri" id="pgGo">🖨 출력하기</button></div>
+    </div></div>`;
+    const info = () => {
+      const og = $('#pgOnly').checked;
+      const n = d.students.filter((st) => selSt.has(st.id) && [...selSet].some((cid) => { const x = has[st.id + ':' + cid]; return x && (!og || x.status === 'graded'); })).length;
+      $('#pgInfo').textContent = `학생 ${n}명 · 시험 ${selSet.size}개를 출력해요 (학생마다 새 쪽)`;
+    };
+    m.querySelectorAll('[data-st]').forEach((x) => (x.onchange = () => { x.checked ? selSt.add(+x.dataset.st) : selSt.delete(+x.dataset.st); draw(); }));
+    m.querySelectorAll('[data-set]').forEach((x) => (x.onchange = () => { x.checked ? selSet.add(+x.dataset.set) : selSet.delete(+x.dataset.set); draw(); }));
+    $('#stAll').onclick = () => { d.students.forEach((st) => selSt.add(st.id)); draw(); };
+    $('#stNone').onclick = () => { selSt.clear(); draw(); };
+    $('#ssAll').onclick = () => { sets.forEach((c) => cntOf(c.id) && selSet.add(c.id)); draw(); };
+    $('#ssNone').onclick = () => { selSet.clear(); draw(); };
+    $('#pgOnly').onchange = info; $('#pgDetail').onchange = info;
+    $('#x').onclick = () => (m.innerHTML = '');
+    $('#bg').onclick = (e) => { if (e.target.id === 'bg') m.innerHTML = ''; };
+    $('#pgGo').onclick = () => {
+      const og = $('#pgOnly').checked, det = $('#pgDetail').checked;
+      const chosen = sets.filter((c) => selSet.has(c.id));
+      const pages = d.students.filter((st) => selSt.has(st.id)).map((st) => {
+        const parts = chosen.map((c) => { const x = has[st.id + ':' + c.id]; return x && (!og || x.status === 'graded') ? { c, sub: x, correct: c.questions.map((q) => q.answerText), hist: hby[st.id + ':' + c.id] || [] } : null; }).filter(Boolean);
+        return parts.length ? `<div class="spage">${studentReportHTML(st, parts, det, `${GRADE}학년 2학기 영어`)}</div>` : '';
+      }).filter(Boolean);
+      if (!pages.length) return alert('출력할 결과가 없어요. 학생과 시험을 확인해 주세요.');
+      $('#printArea').innerHTML = pages.join('');
+      m.innerHTML = '';
+      printOnly($('#printArea'));
+    };
+    info();
+  };
+  draw();
+}
+
+// ---------------- 명렬표 ----------------
+let PREVIEW = null;
+async function roster() {
+  app.innerHTML = `${clsTabs(CLS)}
+  <div class="tabs seg" style="margin:4px 0 12px"><button class="tab ${RSUB === 'list' ? 'on' : ''}" data-rsub="list">👥 현재 명렬표</button><button class="tab ${RSUB === 'upload' ? 'on' : ''}" data-rsub="upload">📄 파일로 올리기</button></div>
+  ${RSUB === 'upload' ? `<div class="card"><div class="bar" style="margin-top:0"><input type="file" id="file" accept=".xlsx,.xls,.csv,.txt">
+    <label>학년 <select id="defgrade" class="field">${[3, 4].map((g) => `<option value="${g}" ${g === GRADE ? 'selected' : ''}>${g}학년</option>`).join('')}</select></label>
+    <label>반 정보가 없을 때 <select id="defcls" class="field">${Array.from({ length: 15 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${n === CLS ? 'selected' : ''}>${n}반</option>`).join('')}</select></label></div>
+    <details class="help"><summary>ⓘ 어떤 파일을 올릴 수 있나요?</summary><p class="small">· <b>반, 번호, 이름</b> 열이 있는 엑셀(.xlsx/.xls/.csv)<br>· ‘&lt;3학년 1반&gt;’ 같은 제목 줄이 반마다 있는 출석부 형식 (학년·반을 알아서 읽어요)<br>· 시트 이름이 ‘1반’, ‘2반’…인 파일<br>· <b>‘학생 계정 ID’ 열</b>을 로그인용으로 함께 읽어요. 한 칸에 ID가 두 개면 둘 다 쓸 수 있어요. AIEP 이메일은 저장하지 않아요.<br>· 같은 학년·반·번호가 이미 있으면 이름과 ID만 바뀌고, 학생이 낸 답은 그대로 남아요.</p></details>
+    <div id="pv"></div></div>` : '<div id="cur"></div>'}`;
+  bindCls(roster);
+  app.querySelectorAll('[data-rsub]').forEach((b) => (b.onclick = () => { RSUB = b.dataset.rsub; roster(); }));
+  if (RSUB === 'upload') { $('#file').onchange = readFile; $('#defcls').onchange = () => { if ($('#file').files[0]) readFile(); }; }
+  else drawCur();
+}
+async function drawCur() {
+  const my = ++DRAW_SEQ;
+  if ($('#cur')) $('#cur').innerHTML = `<p class="muted">${GRADE}학년 ${CLS}반 명렬표를 불러오는 중…</p>`;
+  const d = await T(`/api/t/overview?grade=${GRADE}&class=${CLS}`);
+  if (my !== DRAW_SEQ || !$('#cur')) return;
+  $('#cur').innerHTML = `<table class="plain"><tr><th>번호</th><th>이름</th><th>학생 계정 ID (로그인용)</th><th></th></tr>${d.students.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td>
+    <td><input class="field small" data-ids="${s.id}" value="${esc((s.login_ids || []).join(', '))}" placeholder="ID 없음 — 로그인 불가" style="width:230px"> <button class="btn sm" data-saveid="${s.id}">ID 저장</button></td>
+    <td><button class="btn sm danger" data-del="${s.id}" data-n="${esc(s.name)}">삭제</button></td></tr>`).join('')}
+  <tr><td><input id="nno" class="field" type="number" min="1" style="width:70px" placeholder="번호"></td><td><input id="nnm" class="field" placeholder="이름"></td><td><input id="nid" class="field small" placeholder="학생 계정 ID (여러 개는 쉼표로)" style="width:230px"></td><td><button class="btn sm" id="add">추가</button></td></tr></table>
+  <p class="small muted">${GRADE}학년 ${CLS}반 ${d.students.length}명 · ID가 두 개인 학생은 쉼표로 둘 다 넣으면 둘 다 로그인돼요.</p>
+  ${(() => { const n = d.students.filter((s) => !s.login_ids || !s.login_ids.length).length; return n ? `<div class="notice">⚠️ ${CLS}반에 학생 계정 ID가 없는 학생이 ${n}명 있어요. 이 학생들은 로그인할 수 없어요. 엑셀을 다시 올리거나 위 표에 ID를 넣어 주세요.</div>` : (d.students.length ? '<div class="notice ok">✅ 모든 학생에게 학생 계정 ID가 있어요.</div>' : ''); })()}`;
+  $('#cur').querySelectorAll('[data-saveid]').forEach((b) => (b.onclick = async () => {
+    const r = await T('/api/t/student-ids', { id: +b.dataset.saveid, login_ids: $(`[data-ids="${b.dataset.saveid}"]`).value });
+    $(`[data-ids="${b.dataset.saveid}"]`).value = r.login_ids.join(', '); toast('ID를 저장했어요');
+  }));
+  $('#cur').querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
+    if (!confirm(`${b.dataset.n} 학생을 삭제할까요? 이 학생이 낸 답도 모두 지워져요.`)) return;
+    await T('/api/t/student-delete', { id: +b.dataset.del }); drawCur();
+  }));
+  $('#add').onclick = async () => {
+    const number = +$('#nno').value, name = $('#nnm').value.trim(), ids = $('#nid').value;
+    if (!number || !name) return alert('번호와 이름을 써 주세요');
+    await T('/api/t/roster', { classes: [{ grade: GRADE, class_no: CLS, students: [{ number, name, login_ids: ids }] }] }); drawCur();
+  };
+}
+const clsOf = (v) => { const s = String(v ?? ''); const m = s.match(/(\d+)\s*반/) || s.match(/-\s*(\d+)/) || s.match(/(\d+)(?!.*\d)/); const n = m ? +m[1] : NaN; return n >= 1 && n <= 15 ? n : null; };
+async function readFile() {
+  const f = $('#file').files[0]; if (!f) return;
+  if (!window.XLSX) { alert('엑셀 읽기 도구를 불러오는 중이에요. 잠시 뒤 다시 시도해 주세요.'); return; }
+  const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', codepage: 949 });
+  const def = +$('#defcls').value, defG = +$('#defgrade').value, out = {};
+  const gradeOf = (v) => { const m = String(v ?? '').match(/(\d)\s*학년/); return m ? +m[1] : null; };
+  let curG = defG;
+  const put = (c, number, name, ids) => { if (!c || !number || !name) return; const k = curG + '-' + c; (out[k] = out[k] || new Map()).set(number, { name, ids }); };
+  for (const sn of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' }).map((r) => r.map((x) => String(x).trim()));
+    const sheetCls = wb.SheetNames.length > 1 || /반/.test(sn) ? clsOf(sn) : null;
+    curG = gradeOf(sn) || defG;
+    const isHead = (r) => r.some((x) => /^(학생\s*)?(이름|성명)/.test(x));
+    const heads = rows.map((r, i) => (isHead(r) ? i : -1)).filter((i) => i >= 0);
+    let ci = -1, ni = -1, mi = -1, ii = -1, auto = 0, block = 0;
+    const setCols = (hr) => {
+      mi = hr.findIndex((x) => /^(학생\s*)?(이름|성명)/.test(x));
+      ni = hr.findIndex((x) => /번호|번$|^no/i.test(x));
+      ci = hr.findIndex((x, k) => k !== ni && /^반$|학반|반\s*\(|^class/i.test(x));
+      ii = hr.findIndex((x) => /\bID\b|아이디/i.test(x) && !/AIEP|이메일|메일/i.test(x));
+    };
+    if (!heads.length) {
+      const sample = rows.find((r) => r.filter(Boolean).length) || [];
+      const nonEmpty = sample.filter(Boolean).length;
+      if (nonEmpty >= 3) { ci = 0; ni = 1; mi = 2; } else if (nonEmpty === 2) { ni = 0; mi = 1; } else { mi = 0; }
+    }
+    // 반 열이 없고 머리글(성명/이름)이 여러 번 나오면 → 머리글마다 1반, 2반, … 순서로 나눔
+    const blocks = heads.length > 1;
+    let titleCls = null, blockCls = null;
+    rows.forEach((r, i) => {
+      // '<4학년 1반>' 같은 제목 줄이 있으면 그 반으로
+      const cells = r.filter(Boolean);
+      if (cells.length === 1 && /\d+\s*반/.test(cells[0]) && !isHead(r)) { titleCls = clsOf(cells[0]); curG = gradeOf(cells[0]) || curG; return; }
+      if (isHead(r)) { setCols(r); block++; auto = 0; blockCls = titleCls || block; titleCls = null; return; }
+      if (heads.length && i < heads[0]) return;
+      const name = (r[mi] || '').replace(/\s+/g, ' ').trim(); if (!name) return;
+      const number = ni >= 0 ? parseInt(r[ni], 10) : ++auto; if (!number) return;
+      const c = ci >= 0 ? clsOf(r[ci]) : (sheetCls || (blocks || blockCls ? blockCls : def));
+      const ids = ii >= 0 ? String(r[ii] || '').split(/[\s,;/]+/).map((x) => x.trim().toLowerCase()).filter(Boolean) : null;
+      put(c, number, name, ids);
+    });
+  }
+  const classes = Object.keys(out).sort((a, b) => a.split('-')[0] - b.split('-')[0] || a.split('-')[1] - b.split('-')[1]).map((k) => ({ grade: +k.split('-')[0], class_no: +k.split('-')[1], students: [...out[k]].sort((a, b) => a[0] - b[0]).map(([number, v]) => ({ number, name: v.name, login_ids: v.ids })) }));
+  PREVIEW = classes;
+  if (!classes.length) { $('#pv').innerHTML = '<div class="notice">학생을 찾지 못했어요. 첫 줄에 ‘반, 번호, 이름’ 머리글이 있는지 확인해 주세요.</div>'; return; }
+  $('#pv').innerHTML = `<div class="notice ok">${classes.map((c) => `<b>${c.grade}학년 ${c.class_no}반 ${c.students.length}명</b>`).join(' · ')} 을(를) 찾았어요. 확인하고 저장하세요.</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">${classes.map((c) => `<table class="plain"><tr><th colspan="3">${c.grade}학년 ${c.class_no}반</th></tr>${c.students.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td><td class="small">${s.login_ids ? s.login_ids.map(esc).join('<br>') : '<span class="muted">ID 없음</span>'}</td></tr>`).join('')}</table>`).join('')}</div>
+    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? '<div class="notice">⚠️ 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요.</div>' : ''}
+    <label class="bar" style="cursor:pointer"><input type="checkbox" id="replaceR" checked> <span><b>반 전체 바꾸기</b> — 이 파일에 있는 반은, 파일에 없는 번호의 학생을 지워요 (그 학생이 낸 답도 지워짐). 번호가 바뀐 새 명렬표를 올릴 때 켜 두세요.</span></label>
+    <div class="bar"><button class="btn pri" id="saveR">명렬표 저장</button></div>`;
+  $('#saveR').onclick = async () => {
+    const replace = $('#replaceR').checked;
+    if (replace && !confirm('파일에 없는 번호의 학생은 지워져요. 계속할까요?')) return;
+    const r = await T('/api/t/roster', { classes: PREVIEW, replace });
+    toast(`${r.count}명 저장했어요 (ID 있는 학생 ${r.withIds}명${r.removed ? `, 지운 학생 ${r.removed}명` : ''})`); $('#pv').innerHTML = ''; $('#file').value = ''; CLS = PREVIEW[0].class_no; GRADE = PREVIEW[0].grade; localStorage.setItem('eng4-grade', GRADE); for (const c of PREVIEW) CLASS_COUNT[c.grade] = Math.max(CLASS_COUNT[c.grade] || 0, c.class_no); RSUB = 'list'; roster();
+  };
+}
+
+// ---------------- 시험 링크·QR ----------------
+let LINKSEL = null, CLOSED = new Set();
+async function loadClosed() { try { CLOSED = new Set((await T('/api/t/settings')).closed); } catch {} }
+const testUrl = (id) => `${location.origin}/t/${id}`;
+function qrSVG(text, cell = 5) { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: cell, margin: 2, scalable: true }); }
+function linksView() {
+  const sets = KG();
+  if (!LINKSEL || LINKSEL.grade !== GRADE) LINKSEL = { grade: GRADE, ids: new Set(sets.filter((c) => c.kind !== 'concept').map((c) => c.id)) };
+  const kindName = { concept: '📘 기본 개념', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+  app.innerHTML = `<div class="ctx noprint">${gradeTabs()}<span style="flex:1"></span>
+      <button class="btn sm" id="lkAll">전체 선택</button><button class="btn sm ghost" id="lkNone">선택 해제</button><button class="btn sm pri" id="lkPrint">🖨 고른 QR 카드 출력 (${LINKSEL.ids.size})</button></div>
+    <div class="notice noprint small">🔓 <b>열린 시험만</b> 학생 화면에서 풀 수 있어요. 닫힌 시험은 학생 목록에 🔒로 보이고 제출할 수 없어요 (이미 본 결과는 볼 수 있어요).<br>학생이 링크나 QR로 들어와 로그인하면 그 시험이 바로 열려요. 학생 첫 화면 주소: <b>${location.origin}</b></div>
+    <div class="bar noprint"><b>${GRADE}학년: 열림 ${sets.filter((c) => !CLOSED.has(c.id)).length} · 닫힘 ${sets.filter((c) => CLOSED.has(c.id)).length}</b></div>
+    ${groups.map(([g, cs]) => `<div class="grphead noprint"><h3 class="grp">${g}</h3><button class="btn sm" data-open="${cs.map((c) => c.id).join(',')}">모두 열기</button><button class="btn sm ghost" data-close="${cs.map((c) => c.id).join(',')}">모두 닫기</button></div><div class="lkgrid noprint">${cs.map((c) => `
+      <div class="lk ${LINKSEL.ids.has(c.id) ? 'on' : ''} ${CLOSED.has(c.id) ? 'off' : ''}">
+        <label class="lkchk"><input type="checkbox" data-lk="${c.id}" ${LINKSEL.ids.has(c.id) ? 'checked' : ''}> 출력</label>
+        <div class="lkqr">${qrSVG(testUrl(c.id), 3)}</div>
+        <div class="lkinfo"><div class="small muted">${c.kind === 'concept' ? `개념 ${c.id}` : `${esc(c.unit)} · ${kindName[c.kind]}`}</div>
+          <b>${esc(c.title)}</b>
+          <div class="lkurl">${testUrl(c.id)}</div>
+          <div class="bar" style="margin:6px 0 0"><label class="sw2"><input type="checkbox" data-tog="${c.id}" ${CLOSED.has(c.id) ? '' : 'checked'}><i></i>${CLOSED.has(c.id) ? '🔒 닫힘' : '🔓 열림'}</label></div>
+          <div class="bar" style="margin:6px 0 0"><button class="btn sm" data-copy="${c.id}">📋 링크 복사</button><a class="btn sm ghost" href="/t/${c.id}" target="_blank">열어 보기</a></div></div>
+      </div>`).join('')}</div>`).join('')}
+    <div id="qrPrint"></div>`;
+  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); linksView(); }));
+  app.querySelectorAll('[data-lk]').forEach((x) => (x.onchange = () => { x.checked ? LINKSEL.ids.add(+x.dataset.lk) : LINKSEL.ids.delete(+x.dataset.lk); linksView(); }));
+  const setOpen = async (ids, enabled) => { const r = await T('/api/t/settings', { concepts: ids, enabled }); CLOSED = new Set(r.closed); toast(enabled ? `${ids.length}개 열었어요` : `${ids.length}개 닫았어요`); linksView(); };
+  app.querySelectorAll('[data-tog]').forEach((x) => (x.onchange = () => setOpen([+x.dataset.tog], x.checked)));
+  app.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => setOpen(b.dataset.open.split(',').map(Number), true)));
+  app.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => { if (confirm('이 묶음의 시험을 모두 닫을까요? 학생들이 풀 수 없게 돼요.')) setOpen(b.dataset.close.split(',').map(Number), false); }));
+  $('#lkAll').onclick = () => { sets.forEach((c) => LINKSEL.ids.add(c.id)); linksView(); };
+  $('#lkNone').onclick = () => { LINKSEL.ids.clear(); linksView(); };
+  app.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = async () => {
+    const u = testUrl(b.dataset.copy);
+    try { await navigator.clipboard.writeText(u); toast('링크를 복사했어요'); } catch { prompt('이 링크를 복사하세요', u); }
+  }));
+  $('#lkPrint').onclick = () => {
+    const chosen = sets.filter((c) => LINKSEL.ids.has(c.id));
+    if (!chosen.length) return alert('출력할 시험을 골라 주세요');
+    $('#qrPrint').innerHTML = `<div class="qrcards">${chosen.map((c) => `<div class="qrcard">
+        <div class="qc-top">${GRADE}학년 2학기 영어</div>
+        <div class="qc-title">${esc(c.kind === 'concept' ? `개념 ${c.id} · ${c.title}` : c.title)}</div>
+        <div class="qc-qr">${qrSVG(testUrl(c.id), 6)}</div>
+        <div class="qc-url">${testUrl(c.id)}</div>
+        <div class="qc-help">📱 QR을 찍거나 주소를 입력한 뒤, 이름과 학생 계정 ID로 들어가요</div></div>`).join('')}</div>`;
+    printOnly($('#qrPrint'));
+  };
+}
+
+// ---------------- 문제·정답 ----------------
+function keyView() {
+  const sets = KG();
+  if (!sets.some((c) => c.id === KEYSEL)) KEYSEL = sets[0] && sets[0].id;
+  const groups = [];
+  for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+  const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  const c = sets.find((x) => x.id === KEYSEL);
+  app.innerHTML = `<div class="ctx noprint">${gradeTabs()}<span style="flex:1"></span><button class="btn sm" onclick="print()">🖨 이 세트 인쇄</button></div>
+  <div class="layout2">
+    <nav class="side noprint">${groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((x) => `<button class="si ${x.id === KEYSEL ? 'on' : ''}" data-key="${x.id}">${x.kind === 'concept' ? `${x.id}. ${esc(x.title)}` : kindName[x.kind]}<span class="muted"> ${x.questions.length}</span></button>`).join('')}`).join('')}</nav>
+    <section>${c ? `<div class="card"><h3 style="margin-top:0">${c.kind === 'concept' ? qLabel(c) + ' · ' : ''}${esc(c.title)} <span class="muted small">(${esc(c.unit)}, ${c.questions.length}문제)</span></h3>
+      <ol class="keylist">${c.questions.map((q) => `<li>${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(🔊 ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}${q.money ? ` <span class="muted">(${q.money.c100 ? '100원×' + q.money.c100 : ''}${q.money.b1000 ? '1000원×' + q.money.b1000 : ''})</span>` : ''}${q.opts ? `<div class="muted small">[${q.opts.map(optLabel).join(' / ')}]</div>` : ''}<div>→ <b style="color:var(--ok)">${optLabel(q.answerText)}</b></div></li>`).join('')}</ol></div>` : '<p class="muted">문제가 없어요.</p>'}</section>
+  </div>`;
+  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); KEYSEL = null; keyView(); }));
+  app.querySelectorAll('[data-key]').forEach((b) => (b.onclick = () => { KEYSEL = +b.dataset.key; keyView(); scrollTo(0, 0); }));
+}
+
+TOKEN ? boot() : login();
+</script>
+</body></html>

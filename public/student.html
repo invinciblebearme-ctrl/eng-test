@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4학년 2학기 영어 · 기본 개념 정리와 확인 문제</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="/style.css"><base href="/"></head>
+<body>
+<header class="top"><div class="wrap"><h1><span class="dag">†</span> <span id="ttl">2학기 영어</span></h1><span id="who" class="muted"></span><button id="out" class="btn sm ghost" hidden>나가기</button></div></header>
+<main class="wrap" id="app"><p class="muted">불러오는 중…</p></main>
+<script src="/common.js"></script>
+<script>
+let CONCEPTS = [], UNITS = [], ME = null, SUBS = {}, RETAKE = {}, MENU = localStorage.getItem('eng4-menu') || 'concept';
+const app = $('#app');
+const LS = 'eng4-student-token';
+
+let TOKEN = null;
+const S = (path, body) => api(path, body, TOKEN).catch((e) => { if (e.status === 401 && TOKEN) { logout(); } throw e; });
+
+// /t/25 처럼 들어오면 로그인 뒤 그 시험을 바로 엶
+let GO = (location.pathname.match(/^\/t\/(\d+)/) || [])[1] || sessionStorage.getItem('eng4-go');
+if (GO) sessionStorage.setItem('eng4-go', GO);
+function goTarget() {
+  if (!GO) return false;
+  const id = +GO; GO = null; sessionStorage.removeItem('eng4-go'); history.replaceState(null, '', '/');
+  const c = CONCEPTS.find((x) => x.id === id);
+  if (!c) { home(); app.insertAdjacentHTML('afterbegin', '<div class="notice">이 링크의 시험은 우리 학년 시험이 아니에요. 아래 목록에서 골라 주세요.</div>'); return true; }
+  if (c.kind !== 'concept') MENU = 'unit';
+  concept(id); return true;
+}
+async function start() {
+  TOKEN = localStorage.getItem(LS);
+  if (TOKEN) { try { await loadMe(); return goTarget() || home(); } catch { localStorage.removeItem(LS); TOKEN = null; } }
+  login();
+}
+async function loadMe() {
+  const d = await S('/api/me');
+  MEDIA_TOKEN = TOKEN; ME = d.student; SUBS = {}; RETAKE = d.retake || {}; d.submissions.forEach((s) => (SUBS[s.concept] = s));
+  { const c = await S('/api/concepts'); CONCEPTS = c.concepts; UNITS = c.units || []; }   // 선생님이 연 시험이 바로 보이게 매번 새로 받음
+  $('#ttl').textContent = `${ME.grade}학년 2학기 영어`;
+  $('#who').textContent = `${ME.class_no}반 ${ME.number}번 ${ME.name}`;
+  $('#out').hidden = false;
+}
+function logout() { localStorage.removeItem(LS); TOKEN = null; ME = null; CONCEPTS = []; UNITS = []; $('#ttl').textContent = '2학기 영어'; $('#who').textContent = ''; $('#out').hidden = true; login(); }
+$('#out').onclick = () => { if (confirm('나갈까요?')) logout(); };
+
+function login(msg) {
+  app.innerHTML = `<div class="center-screen"><h2>안녕하세요! 👋</h2><p class="lead">이름과 학생 계정 ID를 써서 들어와요.${GO ? '<br><b>들어가면 바로 시험이 열려요.</b>' : ''}</p>
+  <form id="lf" class="card">
+    <label class="small muted">이름</label>
+    <input id="nm" class="field" style="width:100%;font-size:19px;margin:4px 0 14px" autocomplete="off" placeholder="예: 김하늘">
+    <label class="small muted">학생 계정 ID</label>
+    <input id="sid" class="field" style="width:100%;font-size:19px;margin:4px 0 14px" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: 00gs00e000">
+    <div id="lmsg">${msg ? `<div class="notice">${esc(msg)}</div>` : ''}</div>
+    <button class="btn pri" style="width:100%;margin-top:6px">들어가기</button>
+  </form></div>`;
+  $('#nm').focus();
+  $('#lf').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('#lf button'); btn.disabled = true;
+    try {
+      const d = await api('/api/login', { name: $('#nm').value, id: $('#sid').value });
+      TOKEN = d.token; localStorage.setItem(LS, TOKEN);
+      await loadMe(); goTarget() || home();
+    } catch (err) { $('#lmsg').innerHTML = `<div class="notice">${esc(err.message)}</div>`; btn.disabled = false; }
+  };
+}
+
+function statusBadge(s, c) {
+  if (!s) return '<span class="badge">아직 안 풀었어요</span>';
+  const n = c.questions.length;
+  if (s.status === 'graded') return `<span class="badge ${s.score >= n * 0.8 ? 'ok' : 'no'}">채점 완료 · ${s.score}/${n}</span>`;
+  return '<span class="badge wait">제출함 · 채점 기다리는 중</span>';
+}
+const tileHTML = (c) => `<button class="tile${c.open === false && !SUBS[c.id] ? ' closed' : ''}" data-k="${c.id}"><span class="num">${c.kind === 'concept' ? `개념 ${c.id} · ${esc(c.unit)}` : `${c.kind === 'word' ? '🔤 단어 시험' : c.kind === 'spelltest' ? '✍️ 철자 시험' : '📝 단원평가'} · ${c.questions.length}문제`}</span><div class="ttl">${esc(c.title)}</div>${c.open === false && !SUBS[c.id] ? '<span class="badge">🔒 아직 열리지 않았어요</span>' : statusBadge(SUBS[c.id], c)}${!SUBS[c.id] && RETAKE[c.id] && c.open !== false ? ` <span class="badge wait">🔁 ${RETAKE[c.id] + 1}차 다시 풀기</span>` : SUBS[c.id] && SUBS[c.id].attempt > 1 ? ` <span class="badge">${SUBS[c.id].attempt}차</span>` : ''}</button>`;
+function home() {
+  scrollTo(0, 0);
+  const hasConcepts = CONCEPTS.some((c) => c.kind === 'concept');
+  if (!hasConcepts) MENU = 'unit';
+  const done = CONCEPTS.filter((c) => SUBS[c.id]).length;
+  app.innerHTML = `<h2>${esc(ME.name)}, 오늘도 화이팅! 💪</h2>
+  <p class="lead">개념이나 낱말 세트를 눌러 정리를 보고 문제를 풀어요.</p>
+  <div class="bar"><b>제출 ${done} / ${CONCEPTS.length}</b><div class="progress"><i style="width:${done / CONCEPTS.length * 100}%"></i></div><button class="btn sm" id="rf">새로고침</button><button class="btn sm" id="allr">📄 내 결과 모아 보기·출력</button></div>
+  ${hasConcepts ? `<div class="tabs menu"><button class="tab ${MENU === 'concept' ? 'on' : ''}" data-menu="concept">📘 기본 개념</button><button class="tab ${MENU === 'unit' ? 'on' : ''}" data-menu="unit">📝 단원 평가</button></div>` : '<h3 class="grp">📝 단원 평가</h3>'}
+  ${MENU === 'unit' ? UNITS.map((u) => {
+    const sets = CONCEPTS.filter((c) => c.ukey === u.key);
+    const word = sets.find((c) => c.kind === 'word'), exams = sets.filter((c) => c.kind === 'exam');
+    return `<h3 class="grp">${esc(u.name)}${u.title !== u.name ? ' · ' + esc(u.title) : ''}</h3><div class="grid g-concepts">
+      ${word ? tileHTML(word) : ''}
+      ${sets.filter((c) => c.kind === 'spelltest').map(tileHTML).join('')}
+      ${exams.length ? exams.map(tileHTML).join('') : `<div class="tile soon"><span class="num">${esc(u.name)}</span><div class="ttl">단원평가 문제지</div><span class="badge">준비 중</span></div>`}</div>`;
+  }).join('') : `<h3 class="grp">📘 기본 개념 정리 · 확인 문제 (10문제씩)</h3>
+  <div class="grid g-concepts">${CONCEPTS.filter((c) => c.kind === 'concept').map(tileHTML).join('')}</div>`}`;
+  app.querySelectorAll('[data-menu]').forEach((b) => (b.onclick = () => { MENU = b.dataset.menu; localStorage.setItem('eng4-menu', MENU); home(); }));
+  app.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => concept(+b.dataset.k)));
+  $('#rf').onclick = async () => { await loadMe(); home(); };
+  $('#allr').onclick = allResults;
+}
+
+async function concept(id) {
+  scrollTo(0, 0);
+  const c = CONCEPTS.find((x) => x.id === id);
+  const s = SUBS[id];
+  app.innerHTML = `<button class="btn sm" id="back">← 개념 목록</button>
+  <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2><p class="lead">${esc(c.lead)}${c.locked ? '' : ' <span class="small">(영어를 누르면 소리가 나와요 🔊)</span>'}</p>
+  <div id="sum">${c.locked ? (s ? '<p class="muted">정리 내용을 불러오는 중…</p>' : '<div class="notice">🔒 낱말·표현 정리는 시험을 본 뒤에 볼 수 있어요.</div>') : fillSummary(c.summary)}</div>
+  <div id="qarea"></div>`;
+  $('#back').onclick = home;
+  if (c.locked && s) {
+    try { $('#sum').innerHTML = `<h3 class="grp">📖 정리 (시험을 봐서 열렸어요)</h3>${fillSummary((await S(`/api/summary?concept=${id}`)).summary)}`; } catch (e) { $('#sum').innerHTML = ''; }
+  }
+  bindSpeak($('#sum'));
+  const qa = $('#qarea');
+  if (s && s.status === 'graded') {
+    const d = await S(`/api/submission?concept=${id}`);
+    showResult(c, d.submission, qa);
+  } else {
+    if (!s && c.open === false) { qa.innerHTML = '<div class="notice">🔒 이 시험은 아직 열리지 않았어요. 선생님이 열어 주시면 풀 수 있어요.</div>'; return; }
+    if (s && c.locked) { qa.innerHTML = '<div class="notice ok">✅ 시험을 냈어요. 선생님이 채점하면 결과를 볼 수 있어요.</div>'; return; }
+    qa.innerHTML = `${s ? '<div class="notice">제출했어요. 선생님이 채점하기 전까지는 고쳐서 다시 낼 수 있어요.</div>' : ''}
+      <div class="sticky-foot"><button class="btn pri" id="go">✏️ ${c.kind === 'concept' ? '확인 문제' : '시험'} ${!s && RETAKE[c.id] ? `다시 풀기 (${RETAKE[c.id] + 1}차)` : '풀기'} (${c.questions.length}문제)</button></div>`;
+    $('#go').onclick = async () => {
+      let prev = null;
+      if (s) { try { prev = (await S(`/api/submission?concept=${id}`)).submission.answers; } catch {} }
+      quiz(c, prev);
+    };
+  }
+}
+
+function quiz(c, prev) {
+  if (c.locked) $('#sum').innerHTML = '<div class="notice">🔒 시험 보는 동안에는 정리를 볼 수 없어요.</div>';
+  const ans = c.questions.map((q, i) => (prev && prev[i] != null ? prev[i] : (q.t === 'multi' ? Array(q.blanks).fill('') : q.t === 'spellmean' ? ['', ''] : q.t === 'spell' ? Array((q.pat.match(/__/g) || []).length).fill('') : q.t === 'pick' || q.t === 'order' ? [] : '')));
+  const qa = $('#qarea');
+  qa.innerHTML = `<h2 style="margin-top:28px">✏️ ${c.kind === 'concept' ? '확인 문제' : esc(c.title)}</h2>` + c.questions.map((q, i) => `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div></div>${mediaHTML(q)}<div class="ans"></div></div>`).join('') +
+    `<div class="sticky-foot"><button class="btn pri" id="sub">제출하기</button></div>`;
+  qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
+  c.questions.forEach((q, i) => renderInput(q, i, ans, qa.querySelector(`#q${i} .ans`)));
+  $('#q0').scrollIntoView({ behavior: 'smooth' });
+  $('#sub').onclick = async () => {
+    const empty = ans.map((a, i) => (Array.isArray(a) ? a.filter(Boolean).length === 0 : !String(a).trim()) ? i + 1 : 0).filter(Boolean);
+    if (empty.length && !confirm(`${empty.join(', ')}번 문제를 아직 안 풀었어요. 그래도 낼까요?`)) return;
+    if (!empty.length && !confirm(c.locked ? '시험은 한 번만 낼 수 있어요. 제출할까요?' : '제출할까요?')) return;
+    if (empty.length && c.locked && !confirm('시험은 한 번만 낼 수 있어요. 정말 낼까요?')) return;
+    $('#sub').disabled = true;
+    try {
+      await S('/api/submit', { concept: c.id, answers: ans });
+      toast('제출했어요! 🎉');
+      await loadMe(); concept(c.id);
+    } catch (e) { alert(e.message); $('#sub').disabled = false; }
+  };
+}
+
+function renderInput(q, i, ans, el) {
+  if (q.t === 'text' || q.t === 'time') {
+    el.innerHTML = `<input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${q.t === 'time' ? '예: 5:30' : '답을 쓰세요'}" value="${esc(ans[i])}">`;
+    el.querySelector('input').oninput = (e) => (ans[i] = e.target.value);
+  } else if (q.t === 'choice' || q.t === 'pick') {
+    el.innerHTML = `<div class="opts">${q.opts.map((o, k) => `<button class="opt${q.optImg ? ' pic' : ''}" data-o="${esc(o)}">${optLabel(o)}${q.optImg ? `<img src="${mediaUrl(q.optImg[k])}" alt="">` : ''}</button>`).join('')}</div>`;
+    const paint = () => el.querySelectorAll('.opt').forEach((b) => b.classList.toggle('on', q.t === 'pick' ? ans[i].includes(b.dataset.o) : ans[i] === b.dataset.o));
+    el.querySelectorAll('.opt').forEach((b) => (b.onclick = () => {
+      const o = b.dataset.o;
+      if (q.t === 'pick') ans[i] = ans[i].includes(o) ? ans[i].filter((x) => x !== o) : [...ans[i], o];
+      else ans[i] = o;
+      paint();
+    }));
+    paint();
+  } else if (q.t === 'spellmean') {
+    el.innerHTML = `<div class="sm2"><label>영어 철자<input type="text" data-k="0" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(ans[i][0])}"></label>
+      <label>우리말 뜻<input type="text" data-k="1" autocomplete="off" value="${esc(ans[i][1])}"></label></div>`;
+    el.querySelectorAll('[data-k]').forEach((x) => (x.oninput = () => (ans[i][+x.dataset.k] = x.value)));
+  } else if (q.t === 'spell') {
+    let k = 0;
+    el.innerHTML = `<div class="spell">${q.pat.split(' ').map((t) => (t === '__' ? `<input class="sp" maxlength="1" data-k="${k}" value="${esc(ans[i][k++])}" autocomplete="off" autocapitalize="off" spellcheck="false">` : t === '/' ? '<span class="gap"></span>' : `<span class="ch">${esc(t)}</span>`)).join('')}<span class="mean">(${esc(q.mean)})</span></div>`;
+    const boxes = [...el.querySelectorAll('input.sp')];
+    boxes.forEach((x, j) => (x.oninput = () => { x.value = x.value.replace(/[^a-zA-Z]/g, '').slice(-1); ans[i][j] = x.value; if (x.value && boxes[j + 1]) boxes[j + 1].focus(); }));
+  } else if (q.t === 'multi') {
+    el.innerHTML = Array.from({ length: q.blanks }, (_, k) => q.sel
+      ? `<label>${k + 1}) <select data-k="${k}"><option value="">고르세요</option>${q.sel[k].map((o) => `<option ${ans[i][k] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`
+      : `<input type="text" class="blank" data-k="${k}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="빈칸 ${k + 1}" value="${esc(ans[i][k])}">`).join(' ');
+    el.querySelectorAll('[data-k]').forEach((x) => (x.oninput = x.onchange = () => (ans[i][+x.dataset.k] = x.value)));
+  } else if (q.t === 'order') {
+    const draw = () => {
+      el.innerHTML = `<div class="chips">${ans[i].length ? ans[i].map((w, k) => `<button class="chip" data-r="${k}">${esc(w)}</button>`).join('') + `<b style="font-size:22px;align-self:center">${q.end ?? '.'}</b>` : '<span class="muted small">아래 카드를 순서대로 누르세요</span>'}</div>
+      <div class="opts">${q.words.map((w, k) => `<button class="chip ${countUsed(k) ? 'used' : ''}" data-w="${k}">${esc(w)}</button>`).join('')}</div>`;
+      el.querySelectorAll('[data-w]').forEach((b) => (b.onclick = () => { ans[i] = [...ans[i], q.words[+b.dataset.w]]; draw(); }));
+      el.querySelectorAll('[data-r]').forEach((b) => (b.onclick = () => { ans[i] = ans[i].filter((_, k) => k !== +b.dataset.r); draw(); }));
+    };
+    // 같은 낱말이 여러 번 있는 경우까지 고려해 사용한 카드 표시
+    const countUsed = (k) => { const w = q.words[k]; const before = q.words.slice(0, k).filter((x) => x === w).length; return ans[i].filter((x) => x === w).length > before; };
+    draw();
+  }
+}
+
+// ---------- 결과 보기·출력 ----------
+function showResult(c, sub, qa) {
+  const fb = sub.feedback ? `<div class="notice ok">💬 선생님 말씀: ${esc(sub.feedback)}</div>` : '';
+  qa.innerHTML = `<div class="bar noprint" style="margin-top:24px"><h2 style="margin:0;flex:1">✅ 채점 결과: ${sub.score} / ${c.questions.length}</h2><button class="btn pri" id="prt">🖨 결과 출력하기</button></div>
+    <div class="result">${resultHeadHTML(c, sub, ME)}${fb}${resultItemsHTML(c, sub, sub.correct)}</div>`;
+  qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
+  $('#prt').onclick = () => printOnly(qa.querySelector('.result'));
+}
+// 채점이 끝난 시험을 모아 보기·출력
+async function allResults() {
+  scrollTo(0, 0);
+  const done = CONCEPTS.filter((c) => SUBS[c.id] && SUBS[c.id].status === 'graded');
+  app.innerHTML = `<button class="btn sm noprint" id="back">← 목록</button>
+    <div class="bar noprint"><h2 style="margin:0;flex:1">📄 내 결과 모아 보기</h2>${done.length ? '<button class="btn pri" id="prt">🖨 모두 출력하기</button>' : ''}</div>
+    <div id="all" class="result">${done.length ? '<p class="muted">불러오는 중…</p>' : '<div class="notice">아직 선생님이 채점을 마친 시험이 없어요.</div>'}</div>`;
+  $('#back').onclick = home;
+  if (!done.length) return;
+  const parts = [];
+  for (const c of done) {
+    try { const sub = (await S(`/api/submission?concept=${c.id}`)).submission; parts.push({ c, sub }); } catch {}
+  }
+  $('#all').innerHTML = studentReportHTML(ME, parts.map((p) => ({ ...p, correct: p.sub.correct })), true, `${ME.grade}학년 2학기 영어`);
+  $('#prt').onclick = () => printOnly($('#all'));
+}
+
+start();
+</script>
+</body></html>

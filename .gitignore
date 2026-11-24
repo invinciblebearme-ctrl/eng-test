@@ -1,0 +1,9 @@
+node_modules/
+src/assets.js
+*.log
+.DS_Store
+# 실제 학생 이름·ID가 들어 있는 브라우저 테스트는 올리지 않음
+test/*-e2e.cjs
+test/media/
+test/e2e.cjs
+test/roster.cjs
