@@ -26,7 +26,42 @@ function goTarget() {
   if (c.kind !== 'concept') MENU = 'unit';
   concept(id); return true;
 }
+// ---------- 교사 미리보기: /?preview=번호 ----------
+const PREVIEW_ID = +new URLSearchParams(location.search).get('preview') || 0;
+async function previewMode(id) {
+  const tt = localStorage.getItem('eng4-teacher');
+  if (!tt) { app.innerHTML = '<div class="notice">미리보기는 교사 화면에 로그인한 뒤에 열 수 있어요. <a href="/teacher">교사 화면으로 가기</a></div>'; return; }
+  let key;
+  try { key = (await api('/api/t/key', null, tt)).concepts; } catch (e) { app.innerHTML = `<div class="notice">${esc(e.message)} <a href="/teacher">교사 화면으로 가기</a></div>`; return; }
+  MEDIA_TOKEN = tt;
+  const c = key.find((x) => x.id === id); if (!c) { app.innerHTML = '<div class="notice">시험을 찾을 수 없어요.</div>'; return; }
+  c.questions.forEach((q) => { if (q.t === 'multi') q.blanks = q.a.length; });
+  const same = key.filter((x) => x.grade === c.grade);
+  $('#ttl').textContent = `${c.grade}학년 2학기 영어 · 👀 교사 미리보기`;
+  document.title = '미리보기 · ' + c.title;
+  const ans = c.questions.map((q) => (q.t === 'multi' ? Array(q.a.length).fill('') : q.t === 'spellmean' ? ['', ''] : q.t === 'spell' ? Array((q.pat.match(/__/g) || []).length).fill('') : q.t === 'pick' || q.t === 'order' ? [] : ''));
+  app.innerHTML = `<div class="pvbar"><span class="pvt"><b>👀 교사 미리보기</b> · 풀어 볼 수 있지만 <b>제출·저장되지 않아요</b></span>
+      <select id="pvSel" class="field">${same.map((x) => `<option value="${x.id}" ${x.id === id ? 'selected' : ''}>${esc(x.kind === 'concept' ? `개념 ${x.id} · ${x.title}` : x.title)}</option>`).join('')}</select></div>
+    <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2><p class="lead">${esc(c.lead || '')}</p>
+    ${c.kind !== 'concept' ? '<div class="notice small">🔒 학생에게는 아래 정리가 <b>시험을 낸 뒤에만</b> 보여요. (교사 미리보기라서 보임)</div>' : ''}
+    <div id="sum">${fillSummary(c.summary)}</div>
+    <h2 style="margin-top:28px">✏️ ${c.kind === 'concept' ? '확인 문제' : esc(c.title)} <span class="muted small">(${c.questions.length}문제)</span></h2>
+    <div id="qarea">${c.questions.map((q, i) => `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div><div class="mark"></div></div>${mediaHTML(q)}<div class="ans"></div><div class="fb pvans" hidden>정답: <span class="right">${optLabel(q.answerText)}</span></div></div>`).join('')}</div>
+    <div class="sticky-foot"><button class="btn pri" id="pvTry">✅ 채점해 보기</button> <button class="btn" id="pvKey">👁 정답 보기</button> <button class="btn ghost" id="pvReset">↺ 지우기</button></div>`;
+  bindSpeak($('#sum'));
+  app.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
+  c.questions.forEach((q, i) => renderInput(q, i, ans, app.querySelector(`#q${i} .ans`)));
+  $('#pvSel').onchange = () => { location.search = '?preview=' + $('#pvSel').value; };
+  $('#pvKey').onclick = () => { const show = $('#pvKey').textContent.includes('보기'); app.querySelectorAll('.pvans').forEach((x) => (x.hidden = !show)); $('#pvKey').textContent = show ? '🙈 정답 숨기기' : '👁 정답 보기'; };
+  $('#pvReset').onclick = () => previewMode(id);
+  $('#pvTry').onclick = async () => {
+    const r = await api('/api/t/try', { concept: id, answers: ans }, tt);
+    r.marks.forEach((ok, i) => { const q = $(`#q${i}`); q.classList.toggle('ok', ok); q.classList.toggle('no', !ok); const m = q.querySelector('.mark'); m.className = 'mark ' + (ok ? 'ok' : 'no'); m.textContent = ok ? 'O' : 'X'; });
+    toast(`채점해 보기: ${r.marks.filter(Boolean).length} / ${c.questions.length} (저장 안 됨)`);
+  };
+}
 async function start() {
+  if (PREVIEW_ID) return previewMode(PREVIEW_ID);
   TOKEN = localStorage.getItem(LS);
   if (TOKEN) { try { await loadMe(); return goTarget() || home(); } catch { localStorage.removeItem(LS); TOKEN = null; } }
   login();

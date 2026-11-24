@@ -329,6 +329,12 @@ export default {
           return json({ ok: true, key });
         }
         // 시험 열기/닫기
+        // 미리보기에서 채점해 보기 (저장 안 함)
+        if (p === '/api/t/try' && req.method === 'POST') {
+          const c = conceptOf(body.concept); if (!c) return fail('시험을 찾을 수 없어요');
+          const ans = Array.isArray(body.answers) ? body.answers : [];
+          return json({ marks: c.questions.map((qq, i) => gradeOne(qq, ans[i])) });
+        }
         if (p === '/api/t/settings') {
           if (req.method === 'POST') {
             const ids = (Array.isArray(body.concepts) ? body.concepts : [body.concept]).map(int).filter((x) => conceptOf(x));
