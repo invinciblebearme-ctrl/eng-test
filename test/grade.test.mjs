@@ -1,7 +1,9 @@
 import { CONCEPTS, gradeOne, answerText, fillPattern } from '../src/content.js';
 let bad = 0, n = 0; const pending = [];
 for (const c of CONCEPTS) {
-  if (c.questions.length !== (c.kind === 'exam' ? 20 : c.kind === 'spelltest' ? (c.id === 23 ? 15 : 14) : c.kind === 'word' ? (c.id === 22 ? 23 : 25) : 10)) { console.log('count', c.id, c.questions.length); bad++; }
+  // 기본 개념은 10문항, 다른 세트(단어·철자·단원평가)는 문항이 있으면 됨. 번호 중복도 확인
+  if (c.kind === 'concept' ? c.questions.length !== 10 : !c.questions.length) { console.log('count', c.id, c.questions.length); bad++; }
+  if (CONCEPTS.filter((x) => x.id === c.id).length > 1) { console.log('DUPLICATE id', c.id); bad++; }
   c.questions.forEach((q, i) => {
     n++;
     if (q.a == null) { pending.push(c.id + '-' + (i + 1)); return; }

@@ -28,11 +28,11 @@ http.createServer(async (req, res) => {
 // 가짜 R2: test/media/ 폴더
 import fs from 'node:fs';
 const MEDIA_DIR = process.env.MEDIA_DIR || new URL('./media/', import.meta.url).pathname;
-const MEDIA = { async get(key) { const f = MEDIA_DIR + key; if (!fs.existsSync(f)) return null; const b = fs.readFileSync(f);
+const MEDIA = { async put(key, body) { const f = MEDIA_DIR + key; fs.mkdirSync(f.slice(0, f.lastIndexOf('/')), { recursive: true }); fs.writeFileSync(f, Buffer.from(await new Response(body).arrayBuffer())); }, async get(key) { const f = MEDIA_DIR + key; if (!fs.existsSync(f)) return null; const b = fs.readFileSync(f);
   return { body: b, size: b.length, httpEtag: '"x"', range: null, writeHttpMetadata(h) { h.set('content-type', key.endsWith('.mp3') ? 'audio/mpeg' : 'image/jpeg'); } }; } };
 const env = { MEDIA, AI_API_URL: 'http://127.0.0.1:8789/v1/chat/completions', AI_API_KEY: 'k-test', AI_MODEL: 'jb-model', SUPABASE_URL: 'http://127.0.0.1:8788', SUPABASE_SERVICE_KEY: 'sb_secret_test', TEACHER_PASSWORD: 'test1234' };
 http.createServer(async (req, res) => {
-  let body = ''; for await (const c of req) body += c;
+  const chunks = []; for await (const c of req) chunks.push(c); const body = Buffer.concat(chunks);   // 파일 업로드도 깨지지 않게 바이트 그대로
   const r = await worker.fetch(new Request('http://127.0.0.1:8787' + req.url, { method: req.method, headers: req.headers, body: req.method === 'POST' ? body : undefined }), env);
   res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer()));
 }).listen(8787, () => console.log('ready'));
