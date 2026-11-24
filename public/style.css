@@ -228,3 +228,18 @@ ol.keylist{padding-left:24px}ol.keylist li{margin:8px 0;padding-bottom:8px;borde
 a.btn{text-decoration:none;color:inherit;display:inline-block}
 
 .mx td.c sub.att{font-size:10px;margin-left:2px;color:#7a4fb3;font-weight:800}
+
+/* QR 확대 · 링크 복사 */
+button.lkqr{border:none;background:transparent;padding:0;cursor:zoom-in;position:relative}
+button.lkqr:hover svg{outline:3px solid var(--acc);border-radius:4px}
+.zoomhint{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);font-size:11px;background:var(--ink);color:#fff;border-radius:99px;padding:1px 7px;opacity:0;transition:.15s}
+button.lkqr:hover .zoomhint{opacity:1}
+.linkbtn{border:none;background:transparent;padding:0;cursor:copy;text-align:left;color:#b2391a;font-family:ui-monospace,monospace;text-decoration:underline dotted}
+.linkbtn:hover{color:var(--acc)}
+.btn.done{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
+.qrzoom .box{max-width:620px;text-align:center;background:#fff}
+.qrzoom .box:fullscreen{max-width:none;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.qz-top{color:var(--muted);font-size:16px}.qz-title{font-size:26px;font-weight:900;margin:6px 0 10px}
+.qz-qr svg{width:min(70vh,440px);height:min(70vh,440px)}
+.qrzoom .box:fullscreen .qz-qr svg{width:72vh;height:72vh}
+.qz-url{font-size:20px;margin:8px auto;display:block;text-align:center}.qz-help{color:#555;margin:6px 0}
