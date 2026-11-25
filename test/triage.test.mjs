@@ -11,6 +11,9 @@ const cases = [
   [11, 1, "It's four thirty", true],// 말 덧붙임
   [11, 1, 'nine forty', false],     // 다른 답
   [2, 3, 'friday', false],          // 대소문자만 (대소문자 구별 문항)
+  [1, 1, 'wednesday', false],       // 요일 소문자 = 분명한 오답
+  [13, 10, 'watching tv', false],   // TV 소문자 = 분명한 오답
+  [1, 1, 'Wensday', true],          // 철자 애매
   [3, 1, 'musik', true],            // 철자
   [3, 1, '', false],                // 빈칸
   [1, 3, '화요일', false],          // 고르기 문항

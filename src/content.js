@@ -441,6 +441,30 @@ const norm = (s, cs) => {
   return cs ? v : v.toLowerCase();
 };
 const asList = (a) => (Array.isArray(a) ? a : [a]);
+
+// 영어에서 언제나 대문자로 쓰는 낱말 — 대소문자를 따지지 않는 문항이어도 이 낱말은 대문자가 아니면 오답
+// 요일·달 이름, 언어·나라·국적, I(I'm, I'll…), TV 같은 약어(대문자 2자 이상)
+const PROPER = new Set(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+  'english', 'korean', 'korea', 'america', 'american', 'canada', 'canadian', 'china', 'chinese', 'japan', 'japanese',
+  'france', 'french', 'germany', 'german', 'spain', 'spanish', 'italy', 'italian', 'england', 'australia', 'india', 'vietnam', 'mexico', 'brazil', 'egypt', 'kenya', 'russia', 'uk', 'usa',
+  'i', 'mr', 'mrs', 'ms']);
+const words = (v) => String(v ?? '').replace(/[‘’`´]/g, "'").split(/[^A-Za-z']+/).filter(Boolean);
+export const mustCap = (w) => { const base = w.split("'")[0]; return PROPER.has(base.toLowerCase()) || (/^[A-Z]{2,}$/.test(base) && base.length <= 5); };
+// 정답(key)에서 대문자여야 하는 낱말을 학생 답이 대문자로 썼는지
+export function properOK(ans, key) {
+  const aw = words(ans);
+  for (const w of words(key)) {
+    if (!mustCap(w) || !/^[A-Z]/.test(w)) continue;
+    const hit = aw.find((x) => x.toLowerCase() === w.toLowerCase());
+    if (!hit) continue;
+    const base = w.split("'")[0], hb = hit.split("'")[0];
+    if (/^[A-Z]{2,}$/.test(base) ? hb !== base : !/^[A-Z]/.test(hb)) return false;
+  }
+  return true;
+}
+// 대소문자를 따지지 않되, 언제나 대문자인 낱말은 따짐
+const matchEn = (key, ans, cs) => norm(key, cs) === norm(ans, cs) && (cs || properOK(ans, key));
 const parseTime = (s) => {
   const m = String(s ?? '').replace(/\s/g, '').match(/^(\d{1,2})(?:[:：시.]?(\d{1,2})?분?)?$/);
   if (!m) return null;
@@ -454,11 +478,11 @@ export function gradeOne(q, ans) {
   switch (q.t) {
     case 'text':
       if (q.ko) { const k = (v) => norm(v).replace(/[\s,.~]/g, ''); return asList(q.a).some((x) => k(x) === k(ans)); }
-      return asList(q.a).some((x) => norm(x, q.cs) === norm(ans, q.cs));
+      return asList(q.a).some((x) => matchEn(x, ans, q.cs));
     case 'spellmean': {
       if (!Array.isArray(ans)) return false;
       const k = (v) => norm(v).replace(/[\s,.~?!/]/g, '');
-      return q.a.en.some((x) => norm(x, q.cs) === norm(ans[0], q.cs)) && q.a.ko.some((x) => k(x) === k(ans[1]));
+      return q.a.en.some((x) => matchEn(x, ans[0], q.cs)) && q.a.ko.some((x) => k(x) === k(ans[1]));
     }
     case 'spell':
       return Array.isArray(ans) && q.a.every((x, i) => String(ans[i] ?? '').trim().toLowerCase() === x);
@@ -474,7 +498,7 @@ export function gradeOne(q, ans) {
       return s.size === q.a.length && q.a.every((x) => s.has(x));
     }
     case 'multi':
-      return Array.isArray(ans) && q.a.every((ok, i) => ok.some((x) => norm(x, q.cs) === norm(ans[i], q.cs)));
+      return Array.isArray(ans) && q.a.every((ok, i) => ok.some((x) => matchEn(x, ans[i], q.cs)));
   }
   return false;
 }

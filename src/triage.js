@@ -49,7 +49,7 @@ const asList = (a) => (Array.isArray(a) ? a : [a]);
 export function aiReason(q, ans) {
   if (q.a == null) return null;
   if (['choice', 'pick', 'order', 'time', 'spell'].includes(q.t)) return null;
-  if (q.t === 'text') return closeness(ans, asList(q.a), q.cs && !q.ko);
+  if (q.t === 'text') { const r = closeness(ans, asList(q.a), q.cs && !q.ko); return r === 'exact' ? null : r; }   // 'exact' = 글자는 같고 대문자 규칙만 어김 → 분명한 오답
   if (q.t === 'spellmean') {
     if (!Array.isArray(ans)) return null;
     const en = closeness(ans[0], q.a.en, q.cs), ko = closeness(ans[1], q.a.ko, false);
@@ -57,7 +57,7 @@ export function aiReason(q, ans) {
     if (!en && !ko && closeness(ans[1], q.a.en, false) && closeness(ans[0], q.a.ko, false)) return '철자·뜻 칸이 바뀜';
     if (!en || !ko) return null;                       // 한쪽이 확실히 틀리면 AI 필요 없음
     const parts = [en, ko].filter((x) => x !== 'exact');
-    return parts.length ? parts.join(', ') : null;
+    return parts.length ? parts.join(', ') : null;   // 둘 다 'exact'면 대문자 규칙만 어긴 분명한 오답
   }
   if (q.t === 'multi') {
     if (!Array.isArray(ans)) return null;

@@ -30,7 +30,7 @@ export const UNITS = [
 
 export const WORD_SETS = [
   {
-    id: 17, grade: 4, kind: 'word', ukey: '7', short: '단어7', unit: '7단원', title: '7단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요.',
+    id: 17, grade: 4, kind: 'word', ukey: '7', short: '단어7', unit: '7단원', title: '7단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요. 요일·나라 이름·I처럼 언제나 대문자인 낱말은 대문자로 써요.',
     summary: wordTable(pairs(
       [['Sunday', '일요일'], ['Monday', '월요일'], ['Tuesday', '화요일'], ['Wednesday', '수요일'], ['Thursday', '목요일'], ['Friday', '금요일'], ['Saturday', '토요일'], ['music', '음악'], ['art', '미술']],
       [['computer', '컴퓨터'], ['soccer', '축구'], ['piano', '피아노'], ['dance', '무용, 춤'], ['science', '과학'], ['math', '수학'], ['class', '수업'], ['today', '오늘'], ['day', '날, 요일']])),
@@ -43,7 +43,7 @@ export const WORD_SETS = [
     ],
   },
   {
-    id: 18, grade: 4, kind: 'word', ukey: '8', short: '단어8', unit: '8단원', title: '8단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요.',
+    id: 18, grade: 4, kind: 'word', ukey: '8', short: '단어8', unit: '8단원', title: '8단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요. 요일·나라 이름·I처럼 언제나 대문자인 낱말은 대문자로 써요.',
     summary: wordTable(pairs(
       [['one', '1'], ['two', '2'], ['three', '3'], ['four', '4'], ['five', '5'], ['six', '6'], ['seven', '7'], ['eight', '8'], ['nine', '9']],
       [['hundred', '100'], ['thousand', '1,000'], ['won', '원'], ['pencil', '연필'], ['pencil case', '필통'], ['comic book', '만화책'], ['toy car', '장난감 자동차'], ['much', '많이, 얼마'], ['take', '사다, 가져가다']])),
@@ -56,7 +56,7 @@ export const WORD_SETS = [
     ],
   },
   {
-    id: 19, grade: 4, kind: 'word', ukey: '9', short: '단어9', unit: '9단원', title: '9단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요.',
+    id: 19, grade: 4, kind: 'word', ukey: '9', short: '단어9', unit: '9단원', title: '9단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요. 요일·나라 이름·I처럼 언제나 대문자인 낱말은 대문자로 써요.',
     summary: wordTable(pairs(
       [['bag', '가방'], ['watch', '손목시계'], ['notebook', '공책'], ['cap', '모자'], ['umbrella', '우산'], ['ball', '공'], ['red', '빨간색'], ['blue', '파란색'], ['yellow', '노란색']],
       [['green', '초록색'], ['gray', '회색'], ['pink', '분홍색'], ['white', '흰색'], ['black', '검은색'], ['brown', '갈색'], ['your', '너의'], ['my', '나의'], ['this', '이것']])),
@@ -69,7 +69,7 @@ export const WORD_SETS = [
     ],
   },
   {
-    id: 20, grade: 4, kind: 'word', ukey: '10', short: '단어10', unit: '10단원', title: '10단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요.',
+    id: 20, grade: 4, kind: 'word', ukey: '10', short: '단어10', unit: '10단원', title: '10단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요. 요일·나라 이름·I처럼 언제나 대문자인 낱말은 대문자로 써요.',
     summary: wordTable(pairs(
       [['time', '시각, 시간'], ['breakfast', '아침 식사'], ['lunch', '점심 식사'], ['dinner', '저녁 식사'], ['school', '학교'], ['bed', '침대, 잠자리'], ['homework', '숙제'], ['ten', '10']],
       [['eleven', '11'], ['twelve', '12'], ['thirteen', '13'], ['fourteen', '14'], ['fifteen', '15'], ['thirty', '30'], ['forty', '40'], ['fifty', '50']])),
@@ -82,7 +82,7 @@ export const WORD_SETS = [
     ],
   },
   {
-    id: 21, grade: 4, kind: 'word', ukey: '11', short: '단어11', unit: '11단원', title: '11단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요.',
+    id: 21, grade: 4, kind: 'word', ukey: '11', short: '단어11', unit: '11단원', title: '11단원 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요. 요일·나라 이름·I처럼 언제나 대문자인 낱말은 대문자로 써요.',
     summary: wordTable(pairs(
       [['clean', '청소하다'], ['read', '읽다'], ['watch TV', '텔레비전을 보다'], ['do homework', '숙제하다'], ['draw', '그리다'], ['sing', '노래하다'], ['help', '돕다']],
       [['room', '방'], ['book', '책'], ['game', '게임'], ['table', '탁자'], ['cookie', '과자'], ['picture', '그림'], ['sure', '물론, 좋아']])),
@@ -96,7 +96,7 @@ export const WORD_SETS = [
     ],
   },
   {
-    id: 22, grade: 4, kind: 'word', ukey: 's', short: '단어소리', unit: '소리와 철자', title: '소리와 철자 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요.',
+    id: 22, grade: 4, kind: 'word', ukey: 's', short: '단어소리', unit: '소리와 철자', title: '소리와 철자 단어 시험', lead: '낱말 목록을 소리 내어 읽고 뜻을 익힌 뒤 문제를 풀어 보세요. 요일·나라 이름·I처럼 언제나 대문자인 낱말은 대문자로 써요.',
     summary: wordTable(pairs(
       [['lunch', '점심 식사'], ['touch', '만지다'], ['much', '많이'], ['chair', '의자'], ['bag', '가방']],
       [['bed', '침대'], ['six', '6'], ['sun', '해'], ['run', '달리다'], ['big', '큰']])),
@@ -114,7 +114,7 @@ export const WORD_SETS = [
 const sm = (en, ko, cs) => ({ t: 'spellmean', q: '🔊 잘 듣고, 영어 철자와 우리말 뜻을 쓰세요.', say: Array.isArray(en) ? en[0] : en, a: { en: Array.isArray(en) ? en : [en], ko }, cs });
 const spellSummary = (words, exprs) => `<div class="cards"><div class="card"><h4>1. New Words</h4><table class="tbl words">${words.map(([e, k]) => `<tr><td class="en w">${e}</td><td>${k}</td></tr>`).join('')}</table></div>
   <div class="card dark"><h4>2. Key Expressions</h4>${exprs.map(([e, k]) => `<p class="big en">${e}</p><p class="note">${k}</p>`).join('')}</div></div>`;
-const LEAD = '🔊 소리를 듣고 영어 철자와 우리말 뜻을 함께 쓰세요. 둘 다 맞아야 정답이에요. 문장은 첫 글자 대문자와 ’(어포스트로피)까지 지켜요.';
+const LEAD = '🔊 소리를 듣고 영어 철자와 우리말 뜻을 함께 쓰세요. 둘 다 맞아야 정답이에요. 문장은 첫 글자 대문자와 ’(어포스트로피)까지 지켜요. 요일·나라 이름·I처럼 언제나 대문자인 낱말도 대문자로 써요.';
 
 WORD_SETS.push({
   id: 23, grade: 4, kind: 'spelltest', ukey: '10', short: '철자10', unit: '10단원', title: '10단원 New Words · Key Expressions 철자 시험', lead: LEAD,
