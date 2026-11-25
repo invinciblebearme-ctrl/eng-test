@@ -23,6 +23,7 @@ create table if not exists public.submissions (
   overrides    jsonb  not null default '{}',                          -- 교사가 고친 O/X
   ai           jsonb,                                                 -- AI 채점 제안 {문항: {ok, reason, why}}
   feedback_draft text,                                                -- 예약 작업이 쓴 피드백 초안 (확정 때 공개)
+  reviewed_at  timestamptz,                                           -- ✅ 검토·공개에서 '검토함' 표시
   status       text   not null default 'submitted' check (status in ('submitted','graded')),
   feedback     text,
   submitted_at timestamptz not null default now(),

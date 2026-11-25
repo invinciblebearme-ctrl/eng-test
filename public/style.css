@@ -256,3 +256,26 @@ button.lkqr:hover .zoomhint{opacity:1}
 .fav-key{font-size:30px;font-weight:800;margin:0 0 8px}
 .fav-key .k{display:inline-block;min-width:54px;padding:6px 12px;border:2px solid var(--ink);border-bottom-width:5px;border-radius:10px;background:#fff;font-family:inherit}
 .fav-url{font-family:ui-monospace,monospace;color:#b2391a;word-break:break-all}
+
+/* ✅ 검토·공개 */
+.rvhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0}
+.rvprog{flex:1;min-width:160px;height:8px;background:var(--line);border-radius:99px;overflow:hidden}.rvprog i{display:block;height:100%;background:var(--ok)}
+.rvg,.rvc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0}
+.rvg.focus,.rvc.focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(226,80,42,.15)}
+.rvq{font-size:15px;margin-bottom:6px}
+.rvrow{display:grid;grid-template-columns:30px 1.4fr 1fr 1fr 96px;gap:8px;align-items:center;padding:6px 0;border-top:1px dashed var(--line);font-size:15px}
+.rvg .rvrow{grid-template-columns:1fr 1fr 70px 96px;border-top:none}
+.rvrow.rowf{background:#FFF6EF;border-radius:8px}
+.rvrow .n{font-weight:800;color:var(--acc)}
+.rvrow .stu.big{font-size:20px;font-weight:800}
+.rvg .cnt{font-size:15px;text-align:center}.rvg .cnt b{font-size:24px;color:var(--acc)}
+.rvai{margin:-2px 0 4px 38px}
+.names{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.names .nm{border:1px solid var(--line);background:#FBF8F3;border-radius:99px;padding:3px 10px;font-size:13px;cursor:pointer}
+.names .nm.o{background:var(--okbg);color:var(--ok);border-color:transparent}
+.rvtop{display:flex;align-items:center;gap:6px;flex-wrap:wrap;cursor:pointer}
+.rvtop .sc{margin-left:auto;font-size:18px}.rvtop .sc.ok{color:var(--ok)}.rvtop .sc.low{color:var(--no)}
+.rvc.slim{padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rvc.slim .rvtop{flex:1}
+.rvfb{width:100%;min-height:74px;margin-top:8px;box-sizing:border-box;font-size:15px;line-height:1.5}
+.rvbar{position:sticky;bottom:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:rgba(245,242,236,.96);border-top:1px solid var(--line);padding:10px 4px;margin-top:12px;backdrop-filter:blur(4px)}

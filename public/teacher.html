@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
-  <div class="tabs" id="nav" hidden><button class="tab on" data-v="grades">채점·성적</button><button class="tab" data-v="roster">명렬표</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="reports">📊 분석</button></div>
+  <div class="tabs" id="nav" hidden><button class="tab on" data-v="grades">채점·성적</button><button class="tab" data-v="roster">명렬표</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="review">✅ 검토·공개</button><button class="tab" data-v="reports">📊 분석</button></div>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
 <main class="wrap" id="app"></main>
 <div id="modal"></div>
@@ -45,6 +45,153 @@ async function boot() {
   await loadClosed();
   $('#nav').hidden = false; $('#out').hidden = false; go('grades');
 }
+// ---------------- ✅ 검토·공개: 틀린 문제와 AI 피드백을 한눈에 보고 확정·공개 ----------------
+const RV = { cls: null, set: 'all', state: localStorage.getItem('eng4-rvstate') || 'wait', mode: localStorage.getItem('eng4-rvmode') || 'group', data: null, sel: new Set(), focus: 0, row: 0 };
+const normAns = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+async function reviewView() {
+  if (RV.cls == null) RV.cls = CLS;
+  const sets = KG();
+  app.innerHTML = `<div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs"><button class="tab ${RV.cls === 0 ? 'on' : ''}" data-rcls="0">전체 반</button>${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === RV.cls ? 'on' : ''}" data-rcls="${n}">${n}반</button>`).join('')}</div></div>
+    <div class="bar view" style="flex-wrap:wrap;gap:8px">
+      <select id="rvSet" class="field"><option value="all">모든 시험</option><option value="concept" ${RV.set === 'concept' ? 'selected' : ''}>📘 기본 개념 전체</option>${sets.map((c) => `<option value="${c.id}" ${String(RV.set) === String(c.id) ? 'selected' : ''}>${esc(setTitle(c))}</option>`).join('')}</select>
+      <div class="tabs seg">${[['wait', '채점 대기'], ['unpub', '확정·피드백 미공개'], ['all', '전체']].map(([k, t]) => `<button class="tab ${RV.state === k ? 'on' : ''}" data-rst="${k}">${t}</button>`).join('')}</div>
+      <span style="flex:1"></span>
+      <div class="tabs seg">${[['group', '🧩 문항별 묶음'], ['card', '🧑‍🎓 학생별 카드']].map(([k, t]) => `<button class="tab ${RV.mode === k ? 'on' : ''}" data-rmode="${k}">${t}</button>`).join('')}</div>
+    </div>
+    <div id="rvBody"><p class="muted">불러오는 중…</p></div>`;
+  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); RV.set = 'all'; RV.sel.clear(); reviewView(); }));
+  app.querySelectorAll('[data-rcls]').forEach((b) => (b.onclick = () => { RV.cls = +b.dataset.rcls; RV.sel.clear(); reviewView(); }));
+  app.querySelectorAll('[data-rst]').forEach((b) => (b.onclick = () => { RV.state = b.dataset.rst; localStorage.setItem('eng4-rvstate', RV.state); RV.sel.clear(); reviewView(); }));
+  app.querySelectorAll('[data-rmode]').forEach((b) => (b.onclick = () => { RV.mode = b.dataset.rmode; localStorage.setItem('eng4-rvmode', RV.mode); RV.focus = 0; drawReview(); }));
+  $('#rvSet').onchange = () => { RV.set = $('#rvSet').value; RV.sel.clear(); reviewView(); };
+  const ids = RV.set === 'all' ? [] : RV.set === 'concept' ? sets.filter((c) => c.kind === 'concept').map((c) => c.id) : [+RV.set];
+  const my = ++DRAW_SEQ;
+  let d; try { d = await T(`/api/t/review?grade=${GRADE}&class=${RV.cls || ''}&state=${RV.state}&concepts=${ids.join(',')}`); } catch (e) { $('#rvBody').innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  if (my !== DRAW_SEQ || VIEW !== 'review') return;
+  const stBy = Object.fromEntries(d.students.map((x) => [x.id, x]));
+  const order = Object.fromEntries(sets.map((c, k) => [c.id, k]));
+  RV.data = d.items.map((r) => {
+    const c = KEY.find((x) => x.id === r.concept), st = stBy[r.student_id];
+    const marks = c.questions.map((_, i) => (r.overrides && r.overrides[i] != null ? !!r.overrides[i] : !!r.auto[i]));
+    const wrong = c.questions.map((qq, i) => ((!r.auto[i] || !marks[i]) && qq.a != null ? i : -1)).filter((i) => i >= 0);
+    return { ...r, c, st, marks, wrong };
+  }).filter((r) => r.st).sort((a, b) => a.st.class_no - b.st.class_no || a.st.number - b.st.number || order[a.concept] - order[b.concept]);
+  drawReview();
+}
+const rvScore = (r) => r.marks.filter(Boolean).length;
+const rvWarn = (r) => r.feedback_draft && !r.feedback && r.wrong.some((i) => r.marks[i] && !r.auto[i] && r.feedback_draft.includes(`${i + 1}번`));
+function rvGroups() {
+  const m = new Map();
+  for (const r of RV.data) for (const i of r.wrong) {
+    const q = r.c.questions[i], ans = normAns(answerToText(q, r.answers[i])) || '(빈칸)', k = `${r.concept}:${i}:${ans}`;
+    if (!m.has(k)) m.set(k, { k, c: r.c, i, q, ans, items: [] });
+    m.get(k).items.push(r);
+  }
+  const order = Object.fromEntries(KG().map((c, k) => [c.id, k]));
+  return [...m.values()].sort((a, b) => order[a.c.id] - order[b.c.id] || a.i - b.i || b.items.length - a.items.length);
+}
+function drawReview() {
+  const el = $('#rvBody'); if (!el || !RV.data) return;
+  const items = RV.data, rev = items.filter((r) => r.reviewed_at).length;
+  const head = `<div class="rvhead"><b>${items.length}건</b> <span class="muted small">· 틀린 문항 ${items.reduce((a, r) => a + r.wrong.length, 0)}개 · 💬 초안 ${items.filter((r) => r.feedback_draft && !r.feedback).length}건 · 검토함 ${rev}/${items.length}</span><div class="rvprog"><i style="width:${items.length ? Math.round(rev / items.length * 100) : 0}%"></i></div></div>`;
+  const keys = RV.mode === 'group' ? 'J/K 묶음 이동 · O/X 이 묶음 전체 채점' : 'J/K 카드 이동 · ↑/↓ 문항 · O/X 채점 · Space 선택 · E 피드백 고치기 · R 검토함';
+  let body;
+  if (!items.length) body = `<div class="notice">${RV.state === 'wait' ? '채점 대기 중인 답이 없어요.' : RV.state === 'unpub' ? '공개를 기다리는 피드백 초안이 없어요.' : '제출한 답이 없어요.'}</div>`;
+  else if (RV.mode === 'group') {
+    const gs = rvGroups();
+    body = gs.length ? gs.map((g, k) => {
+      const allO = g.items.every((r) => r.marks[g.i]), allX = g.items.every((r) => !r.marks[g.i]);
+      const ai = g.items.map((r) => r.ai && r.ai[g.i]).filter(Boolean), aiOk = ai.filter((x) => x.ok).length;
+      return `<div class="rvg ${k === RV.focus ? 'focus' : ''}" data-k="${k}">
+        <div class="rvq"><span class="badge">${esc(qLabel(g.c))} ${g.i + 1}번</span> ${optLabel(g.q.q)}${qExtra(g.q)}</div>
+        <div class="rvrow"><div><span class="muted small">학생 답</span><div class="stu big">${optLabel(g.ans)}</div></div><div><span class="muted small">정답</span><div>${optLabel(g.q.answerText)}</div></div>
+          <div class="cnt"><b>${g.items.length}</b>명</div>
+          <div class="ox"><button class="o ${allO ? 'on' : ''}" data-gv="1">O</button><button class="x ${allX ? 'on' : ''}" data-gv="0">X</button></div></div>
+        ${ai.length ? `<div class="small" style="color:${aiOk ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: O ${aiOk} · X ${ai.length - aiOk} — ${esc(ai[0].reason)}</div>` : ''}
+        <div class="names">${g.items.map((r) => `<button class="nm ${r.marks[g.i] ? 'o' : ''}" data-open="${r.id}" title="눌러서 답 전체 보기">${r.st.class_no}-${r.st.number} ${esc(r.st.name)}</button>`).join('')}</div></div>`;
+    }).join('') : '<div class="notice ok">틀린 문항이 없어요. 아래에서 바로 확정할 수 있어요.</div>';
+  } else {
+    body = items.map((r, k) => {
+      const sc = rvScore(r), tot = r.c.questions.length, sel = RV.sel.has(r.id);
+      const top = `<label class="rvtop"><input type="checkbox" data-sel="${r.id}" ${sel ? 'checked' : ''}> <b>${r.st.class_no}반 ${r.st.number}번 ${esc(r.st.name)}</b> <span class="muted">· ${esc(qLabel(r.c))} ${r.c.kind === 'concept' ? esc(r.c.title) : ''}</span> <b class="sc ${sc === tot ? 'ok' : sc >= tot * 0.8 ? '' : 'low'}">${sc}/${tot}</b>
+        <span class="badge ${r.status === 'graded' ? 'ok' : 'wait'}">${r.status === 'graded' ? '확정됨' : '채점 대기'}</span>${r.reviewed_at ? ' <span class="badge ok">✓ 검토함</span>' : ''}${rvWarn(r) ? ' <span class="badge no">⚠️ 피드백 확인 필요</span>' : ''}</label>`;
+      if (!r.wrong.length && !(r.feedback_draft && !r.feedback)) return `<div class="rvc slim ${k === RV.focus ? 'focus' : ''}" data-k="${k}" data-id="${r.id}">${top}<span class="muted small">만점 · 피드백 초안 없음</span></div>`;
+      return `<div class="rvc ${k === RV.focus ? 'focus' : ''}" data-k="${k}" data-id="${r.id}">${top}
+        ${r.wrong.map((i, j) => { const q = r.c.questions[i]; return `<div class="rvrow ${k === RV.focus && j === RV.row ? 'rowf' : ''}"><div class="n">${i + 1}</div><div class="small">${optLabel(q.q)}</div><div class="stu">${optLabel(answerToText(q, r.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
+          <div class="ox"><button class="o ${r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="1">O</button><button class="x ${!r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="0">X</button></div></div>${r.ai && r.ai[i] ? `<div class="small rvai" style="color:${r.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${r.ai[i].ok ? 'O' : 'X'} — ${esc(r.ai[i].reason)}</div>` : ''}`; }).join('')}
+        ${r.feedback ? `<div class="notice ok small" style="margin:8px 0 0">💬 공개됨: ${esc(r.feedback)}</div>` : `<textarea class="rvfb" data-fb="${r.id}" placeholder="피드백 초안이 없어요. 직접 써도 돼요.">${esc(r.feedback_draft || '')}</textarea>`}
+        <div class="bar" style="margin:6px 0 0"><span class="small muted" data-saved="${r.id}"></span><span style="flex:1"></span><button class="btn sm" data-rev="${r.id}">${r.reviewed_at ? '↺ 검토 취소' : '✓ 검토함'}</button><button class="btn sm ghost" data-open="${r.id}">자세히</button></div></div>`;
+    }).join('');
+  }
+  const selN = RV.sel.size, selItems = items.filter((r) => RV.sel.has(r.id));
+  el.innerHTML = `${head}<p class="small muted">⌨ ${keys}</p>${body}
+    <div class="rvbar"><b>선택 ${selN}건</b><button class="btn sm" id="rvPerfect">만점 선택</button><button class="btn sm" id="rvAll">전체 선택</button><button class="btn sm ghost" id="rvNone">해제</button><span style="flex:1"></span>
+      <button class="btn sm" id="rvPub" ${selItems.some((r) => r.feedback_draft && !r.feedback) ? '' : 'disabled'}>💬 피드백만 공개</button>
+      <button class="btn pri" id="rvGo" ${selN ? '' : 'disabled'}>✔ 선택 ${selN}건 확정 + 피드백 공개</button></div>`;
+  bindReview();
+}
+async function rvMark(r, i, v) {
+  r.marks[i] = v;
+  const overrides = {}; r.marks.forEach((m, j) => { if (m !== !!r.auto[j]) overrides[j] = m; });
+  r.overrides = overrides;
+  try { await T('/api/t/review-save', { id: r.id, overrides }); } catch (e) { alert(e.message); }
+}
+async function rvGroupMark(g, v) {
+  const ids = g.items.map((r) => r.id);
+  try { await T('/api/t/bulk-override', { ids, i: g.i, value: v }); } catch (e) { return alert(e.message); }
+  g.items.forEach((r) => { r.marks[g.i] = v; const o = { ...(r.overrides || {}) }; if (!!r.auto[g.i] === v) delete o[g.i]; else o[g.i] = v; r.overrides = o; });
+  toast(`${ids.length}명 ${g.i + 1}번을 ${v ? 'O' : 'X'}로 바꿨어요`);
+  drawReview();
+}
+let RV_T = {};
+function bindReview() {
+  const el = $('#rvBody'), items = RV.data, byId = Object.fromEntries(items.map((r) => [r.id, r]));
+  const gs = RV.mode === 'group' ? rvGroups() : null;
+  el.querySelectorAll('[data-open]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); openSub(+b.dataset.open); }));
+  if (gs) el.querySelectorAll('.rvg').forEach((g) => g.querySelectorAll('[data-gv]').forEach((b) => (b.onclick = () => { RV.focus = +g.dataset.k; rvGroupMark(gs[+g.dataset.k], b.dataset.gv === '1'); })));
+  el.querySelectorAll('.rvc[data-id]').forEach((card) => {
+    const r = byId[+card.dataset.id];
+    card.querySelectorAll('.ox button').forEach((b) => (b.onclick = async () => { RV.focus = +card.dataset.k; await rvMark(r, +b.dataset.i, b.dataset.v === '1'); drawReview(); }));
+  });
+  el.querySelectorAll('[data-sel]').forEach((x) => (x.onchange = () => { x.checked ? RV.sel.add(+x.dataset.sel) : RV.sel.delete(+x.dataset.sel); drawReview(); }));
+  el.querySelectorAll('[data-fb]').forEach((ta) => (ta.oninput = () => {
+    const id = +ta.dataset.fb, r = byId[id]; r.feedback_draft = ta.value;
+    const tag = el.querySelector(`[data-saved="${id}"]`); if (tag) tag.textContent = '저장 중…';
+    clearTimeout(RV_T[id]); RV_T[id] = setTimeout(async () => { try { await T('/api/t/review-save', { id, feedback_draft: ta.value }); if (tag) tag.textContent = '✓ 저장됨'; } catch (e) { if (tag) tag.textContent = '저장 실패: ' + e.message; } }, 700);
+  }));
+  el.querySelectorAll('[data-rev]').forEach((b) => (b.onclick = async () => { const r = byId[+b.dataset.rev], on = !r.reviewed_at; await T('/api/t/review-save', { id: r.id, reviewed: on }); r.reviewed_at = on ? new Date().toISOString() : null; drawReview(); }));
+  $('#rvPerfect').onclick = () => { items.forEach((r) => rvScore(r) === r.c.questions.length && RV.sel.add(r.id)); drawReview(); };
+  $('#rvAll').onclick = () => { items.forEach((r) => RV.sel.add(r.id)); drawReview(); };
+  $('#rvNone').onclick = () => { RV.sel.clear(); drawReview(); };
+  const commit = async (grade) => {
+    const sel = items.filter((r) => RV.sel.has(r.id));
+    const toGrade = grade ? sel.filter((r) => r.status !== 'graded').length : 0, toPub = sel.filter((r) => r.feedback_draft && !r.feedback).length, warn = sel.filter(rvWarn).length;
+    const names = new Set(sel.map((r) => r.student_id)).size;
+    if (!confirm(`${names}명 · ${sel.length}건\n- 확정: ${toGrade}건\n- 피드백 공개: ${toPub}건${warn ? `\n\n⚠️ 피드백 확인이 필요한 카드가 ${warn}건 있어요. 그래도 진행할까요?` : ''}\n\n학생이 바로 결과와 피드백을 볼 수 있어요.`)) return;
+    $('#rvGo').disabled = true;
+    try { const r = await T('/api/t/review-commit', { ids: sel.map((x) => x.id), publish: true, grade }); toast(`확정 ${r.graded}건 · 피드백 공개 ${r.published}건`); RV.sel.clear(); reviewView(); }
+    catch (e) { alert(e.message); $('#rvGo').disabled = false; }
+  };
+  $('#rvGo').onclick = () => commit(true);
+  $('#rvPub').onclick = () => commit(false);
+  // 키보드
+  document.onkeydown = (e) => {
+    if (VIEW !== 'review' || $('#modal').innerHTML || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { if (e.key === 'Escape') document.activeElement.blur(); return; }
+    const n = gs ? gs.length : items.length; if (!n) return;
+    const k = e.key.toLowerCase(), move = (d) => { RV.focus = Math.max(0, Math.min(n - 1, RV.focus + d)); RV.row = 0; drawReview(); const f = $('#rvBody .focus'); if (f) f.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
+    if (k === 'j') { e.preventDefault(); move(1); }
+    else if (k === 'k') { e.preventDefault(); move(-1); }
+    else if (gs && (k === 'o' || k === 'x')) rvGroupMark(gs[RV.focus], k === 'o');
+    else if (!gs) {
+      const r = items[RV.focus]; if (!r) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); RV.row = Math.max(0, Math.min(r.wrong.length - 1, RV.row + (e.key === 'ArrowDown' ? 1 : -1))); drawReview(); }
+      else if ((k === 'o' || k === 'x') && r.wrong.length) rvMark(r, r.wrong[Math.min(RV.row, r.wrong.length - 1)], k === 'o').then(drawReview);
+      else if (e.key === ' ') { e.preventDefault(); RV.sel.has(r.id) ? RV.sel.delete(r.id) : RV.sel.add(r.id); drawReview(); }
+      else if (k === 'e') { const ta = $(`[data-fb="${r.id}"]`); if (ta) { e.preventDefault(); ta.focus(); } }
+      else if (k === 'r') { const b = $(`[data-rev="${r.id}"]`); if (b) b.click(); }
+    }
+  };
+}
 // ---------------- 분석 (Claude 예약 작업이 남긴 보고서) ----------------
 async function reportsView() {
   app.innerHTML = `<div class="ctx">${gradeTabs()}</div><h2>📊 결과 분석</h2>
@@ -59,9 +206,9 @@ async function reportsView() {
   app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => { if (!confirm('이 보고서를 지울까요?')) return; await T('/api/t/report-delete', { id: +b.dataset.del }); reportsView(); }));
 }
 function go(v) {
-  VIEW = v; clearInterval(timer);
+  VIEW = v; clearInterval(timer); document.onkeydown = null;
   document.querySelectorAll('#nav .tab').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
-  ({ grades, roster, key: keyView, links: linksView, reports: reportsView })[v]();
+  ({ grades, roster, key: keyView, links: linksView, review: reviewView, reports: reportsView })[v]();
 }
 const KORD = { concept: 0, word: 1, spelltest: 2, exam: 3 }, unitNo = (c) => (c.kind === 'concept' ? 0 : parseInt(c.unit, 10) || 99);
 const KG = () => KEY.filter((c) => c.grade === GRADE).sort((a, b) => (a.kind === 'concept') - (b.kind === 'concept') ? (b.kind === 'concept') - (a.kind === 'concept') : unitNo(a) - unitNo(b) || KORD[a.kind] - KORD[b.kind] || a.id - b.id);
@@ -227,7 +374,7 @@ async function openSub(id) {
     $('#redo').onclick = async () => { if (!confirm('이 답은 이전 기록으로 남기고, 같은 시험을 다시 풀게 할까요?')) return; await T('/api/t/reissue', { id, open: true }); await loadClosed(); toast('재출제했어요 (이전 기록 보관)'); close(); };
     $('#reset').onclick = async () => { if (!confirm('기록을 남기지 않고 이 답을 완전히 지울까요? 되돌릴 수 없어요.')) return; await T('/api/t/reset', { id }); toast('삭제했어요'); close(); };
   };
-  const close = () => { m.innerHTML = ''; if (VIEW === 'grades') drawGrades(); };
+  const close = () => { m.innerHTML = ''; if (VIEW === 'grades') drawGrades(); else if (VIEW === 'review') reviewView(); };
   draw();
 }
 

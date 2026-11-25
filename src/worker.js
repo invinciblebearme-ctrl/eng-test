@@ -199,7 +199,7 @@ export default {
         const attempt = prev.reduce((m, x) => Math.max(m, x.attempt), 0) + 1;
         await sb(env, 'submissions?on_conflict=student_id,concept', {
           method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
-          body: [{ student_id: st.id, concept: c.id, attempt, answers: clean, auto, overrides: {}, ai: null, status: 'submitted', feedback: null, feedback_draft: null, submitted_at: new Date().toISOString(), graded_at: null }],
+          body: [{ student_id: st.id, concept: c.id, attempt, answers: clean, auto, overrides: {}, ai: null, status: 'submitted', feedback: null, feedback_draft: null, reviewed_at: null, submitted_at: new Date().toISOString(), graded_at: null }],
         });
         return json({ ok: true });
       }
@@ -294,6 +294,56 @@ export default {
           // 피드백 초안도 함께 공개 (선생님이 쓴 말이 없는 것만)
           if (!body.undo && body.useDraft) for (const s of rows) if (s.feedback_draft && !s.feedback) await sb(env, `submissions?id=eq.${s.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { feedback: s.feedback_draft.slice(0, 500) } });
           return json({ count: rows.length, byConcept, byClass, drafts: rows.filter((s) => s.feedback_draft && !s.feedback).length });
+        }
+        // ----- ✅ 검토·공개 -----
+        // 목록: state = wait(채점 대기) | unpub(확정됐지만 피드백 미공개) | all
+        if (p === '/api/t/review') {
+          const g = int(q.get('grade')) || 4, c = int(q.get('class')), state = q.get('state') || 'wait';
+          const students = await sb(env, `students?select=id,class_no,number,name&grade=eq.${g}${c ? `&class_no=eq.${c}` : ''}&order=class_no.asc,number.asc`);
+          if (!students.length) return json({ students: [], items: [] });
+          const ids = (q.get('concepts') || '').split(',').map(int).filter((x) => conceptOf(x));
+          const cond = state === 'wait' ? '&status=eq.submitted' : state === 'unpub' ? '&status=eq.graded&feedback=is.null&feedback_draft=not.is.null' : '';
+          const rows = await sb(env, `submissions?select=id,student_id,concept,attempt,status,answers,auto,overrides,ai,feedback,feedback_draft,reviewed_at&student_id=in.(${students.map((x) => x.id).join(',')})${ids.length ? `&concept=in.(${ids.join(',')})` : ''}${cond}`);
+          return json({ students, items: rows.filter((r) => conceptOf(r.concept) && conceptOf(r.concept).grade === g) });
+        }
+        // 카드 하나 저장: O/X 수정·피드백 초안·검토함 (확정 상태는 그대로)
+        if (p === '/api/t/review-save' && req.method === 'POST') {
+          const patch = {};
+          if (body.overrides) { const o = {}; for (const [k, v] of Object.entries(body.overrides)) if (int(k) != null && int(k) >= 0 && int(k) < 40) o[int(k)] = !!v; patch.overrides = o; }
+          if (body.feedback_draft !== undefined) patch.feedback_draft = String(body.feedback_draft || '').slice(0, 500) || null;
+          if (body.reviewed !== undefined) patch.reviewed_at = body.reviewed ? new Date().toISOString() : null;
+          if (!Object.keys(patch).length) return json({ ok: true });
+          await sb(env, `submissions?id=eq.${int(body.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: patch });
+          return json({ ok: true });
+        }
+        // 묶음 O/X: 여러 제출의 같은 문항을 한 번에
+        if (p === '/api/t/bulk-override' && req.method === 'POST') {
+          const ids = (body.ids || []).map(int).filter(Boolean), i = int(body.i), v = !!body.value;
+          if (!ids.length || i == null || i < 0 || i >= 40) return fail('대상이 없어요');
+          const rows = await sb(env, `submissions?select=id,auto,overrides&id=in.(${ids.join(',')})`);
+          for (const r of rows) {
+            const o = { ...(r.overrides || {}) };
+            if (!!r.auto[i] === v) delete o[i]; else o[i] = v;
+            await sb(env, `submissions?id=eq.${r.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { overrides: o } });
+          }
+          return json({ count: rows.length });
+        }
+        // 확정 + 피드백 공개 (선생님이 쓴 말이 없으면 초안을 공개)
+        if (p === '/api/t/review-commit' && req.method === 'POST') {
+          const ids = (body.ids || []).map(int).filter(Boolean);
+          if (!ids.length) return json({ graded: 0, published: 0 });
+          const now = new Date().toISOString();
+          let graded = 0, published = 0;
+          for (let k = 0; k < ids.length; k += 200) {
+            const rows = await sb(env, `submissions?select=id,status,feedback,feedback_draft&id=in.(${ids.slice(k, k + 200).join(',')})`);
+            for (const r of rows) {
+              const patch = { reviewed_at: now };
+              if (body.grade !== false && r.status !== 'graded') { patch.status = 'graded'; patch.graded_at = now; graded++; }
+              if (body.publish && !r.feedback && r.feedback_draft) { patch.feedback = r.feedback_draft.slice(0, 500); published++; }
+              await sb(env, `submissions?id=eq.${r.id}`, { method: 'PATCH', prefer: 'return=minimal', body: patch });
+            }
+          }
+          return json({ graded, published });
         }
         // 확정된 결과의 💬 피드백 초안을 학생에게 공개 (선생님이 쓴 말이 없는 것만)
         if (p === '/api/t/publish-drafts' && req.method === 'POST') {
