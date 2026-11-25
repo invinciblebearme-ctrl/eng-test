@@ -259,10 +259,43 @@ function renderInput(q, i, ans, el) {
 // ---------- 결과 보기·출력 ----------
 function showResult(c, sub, qa) {
   const fb = sub.feedback ? `<div class="notice ok">💬 선생님 말씀: ${esc(sub.feedback)}</div>` : '';
-  qa.innerHTML = `<div class="bar noprint" style="margin-top:24px"><h2 style="margin:0;flex:1">✅ 채점 결과: ${sub.score} / ${c.questions.length}</h2><button class="btn pri" id="prt">🖨 결과 출력하기</button></div>
+  const wrong = (sub.marks || []).map((m, i) => (m || c.questions[i].pending ? -1 : i)).filter((i) => i >= 0);
+  qa.innerHTML = `<div class="bar noprint" style="margin-top:24px"><h2 style="margin:0;flex:1">✅ 채점 결과: ${sub.score} / ${c.questions.length}</h2>${wrong.length ? `<button class="btn" id="retry">🔁 틀린 문제 다시 풀기 (${wrong.length}문제)</button> ` : ''}<button class="btn pri" id="prt">🖨 결과 출력하기</button></div>
     <div class="result">${resultHeadHTML(c, sub, ME)}${fb}${resultItemsHTML(c, sub, sub.correct)}</div>`;
   qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
   $('#prt').onclick = () => printOnly(qa.querySelector('.result'));
+  if (wrong.length) $('#retry').onclick = () => retryQuiz(c, sub, wrong, qa);
+}
+// 틀린 문제만 다시 풀기 — 연습이라 점수는 바뀌지 않음. 맞힐 때까지 남은 문제만 계속
+function retryQuiz(c, sub, left, qa, round = 1) {
+  const blank = (q) => (q.t === 'multi' ? Array(q.blanks).fill('') : q.t === 'spellmean' ? ['', ''] : q.t === 'spell' ? Array((q.pat.match(/__/g) || []).length).fill('') : q.t === 'pick' || q.t === 'order' ? [] : '');
+  const ans = c.questions.map(blank);
+  $('#sum').innerHTML = '<div class="notice">🔒 다시 푸는 동안에는 정리를 볼 수 없어요.</div>';
+  qa.innerHTML = `<div class="bar" style="margin-top:24px"><h2 style="margin:0;flex:1">🔁 틀린 문제 다시 풀기${round > 1 ? ` · ${round}번째` : ''} <span class="muted small">(${left.length}문제)</span></h2><button class="btn sm" id="rtBack">← 결과로</button></div>
+    <div class="notice small">연습이에요. 다시 풀어도 <b>점수는 바뀌지 않아요.</b> 모두 맞힐 때까지 도전해 보세요!</div>` +
+    left.map((i) => { const q = c.questions[i]; return `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div><div class="mark"></div></div>${mediaHTML(q)}<div class="ans"></div></div>`; }).join('') +
+    `<div class="sticky-foot"><button class="btn pri" id="rtGo">✅ 확인하기</button></div>`;
+  qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
+  left.forEach((i) => renderInput(c.questions[i], i, ans, qa.querySelector(`#q${i} .ans`)));
+  $('#rtBack').onclick = () => concept(c.id);
+  qa.querySelector('.q').scrollIntoView({ behavior: 'smooth' });
+  $('#rtGo').onclick = async () => {
+    $('#rtGo').disabled = true;
+    let marks;
+    try { marks = (await S('/api/retry', { concept: c.id, answers: Object.fromEntries(left.map((i) => [i, ans[i]])) })).marks; }
+    catch (e) { alert(e.message); $('#rtGo').disabled = false; return; }
+    const still = left.filter((i) => !marks[i]);
+    left.forEach((i) => { const m = qa.querySelector(`#q${i} .mark`); m.textContent = marks[i] ? '⭕' : '❌'; m.className = 'mark ' + (marks[i] ? 'ok' : 'no'); });
+    const foot = qa.querySelector('.sticky-foot');
+    if (!still.length) {
+      foot.innerHTML = `<div class="notice ok" style="margin:0">🎉 모두 맞혔어요! 잘했어요.</div> <button class="btn" id="rtEnd">← 결과로</button>`;
+      toast('🎉 모두 맞혔어요!');
+    } else {
+      foot.innerHTML = `<span class="small" style="align-self:center">${left.length - still.length}문제 맞힘 · <b>${still.length}문제</b> 남음</span> <button class="btn pri" id="rtNext">🔁 남은 문제 다시 풀기</button> <button class="btn" id="rtEnd">← 결과로</button>`;
+      $('#rtNext').onclick = () => retryQuiz(c, sub, still, qa, round + 1);
+    }
+    $('#rtEnd').onclick = () => concept(c.id);
+  };
 }
 // 채점이 끝난 시험을 모아 보기·출력
 async function allResults() {

@@ -169,6 +169,21 @@ export default {
         }
         return json({ submission: out });
       }
+      // 틀린 문제 다시 풀기 (연습) — 채점이 끝난 뒤에만, 점수·기록은 바뀌지 않음
+      if (p === '/api/retry' && req.method === 'POST') {
+        const st = await studentFrom(env, req);
+        const c = conceptOf(body.concept); if (!c || c.grade !== st.grade) return fail('번호가 잘못됐어요');
+        const r = await sb(env, `submissions?select=*&student_id=eq.${st.id}&concept=eq.${c.id}`);
+        if (!r.length || r[0].status !== 'graded') return fail('선생님이 채점한 뒤에 다시 풀 수 있어요', 409);
+        const wrong = new Set(marksOf(r[0]).map((m, i) => (m ? -1 : i)).filter((i) => i >= 0));
+        const marks = {};
+        for (const [k, a] of Object.entries(body.answers || {})) {
+          const i = +k; if (!wrong.has(i) || c.questions[i].a == null) continue;
+          const v = Array.isArray(a) ? a.slice(0, 20).map((x) => String(x ?? '').slice(0, 100)) : String(a ?? '').slice(0, 200);
+          marks[i] = gradeOne(c.questions[i], v);
+        }
+        return json({ marks });
+      }
       if (p === '/api/submit' && req.method === 'POST') {
         const st = await studentFrom(env, req);
         const c = conceptOf(body.concept); if (!c || c.grade !== st.grade) return fail('개념 번호가 잘못됐어요');
