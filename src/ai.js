@@ -56,7 +56,7 @@ export async function aiGrade(env, concept, answers, marks) {
   const out = {};
   if (!targets.length) return out;
   const user = `${concept.title}\n\n` + targets.map(({ i, why }) => `### ${i + 1}번 (애매한 이유: ${why})\n${describe(concept.questions[i], answers[i])}`).join('\n\n');
-  const res = parseResults(await callAI(env, user, 120 + 50 * targets.length));
+  const res = parseResults(await callAI(env, user, 300 + 80 * targets.length));
   for (const { i, why } of targets) {
     const r = res.find((x) => +x.n === i + 1);
     out[i] = r ? { ok: !!r.ok, reason: String(r.reason || '').slice(0, 120), why } : { ok: false, reason: 'AI가 답하지 않음 — 선생님 확인', why };

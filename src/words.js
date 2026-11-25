@@ -36,7 +36,7 @@ export const WORD_SETS = [
       [['computer', '컴퓨터'], ['soccer', '축구'], ['piano', '피아노'], ['dance', '무용, 춤'], ['science', '과학'], ['math', '수학'], ['class', '수업'], ['today', '오늘'], ['day', '날, 요일']])),
     questions: [
       toKo('math', ['수학']), toKo('Tuesday', ['화요일']), toKo('computer', ['컴퓨터']), toKo('today', ['오늘']), toKo('music', ['음악']),
-      toEn('토요일', 'Saturday', true), toEn('피아노', 'piano'), toEn('수요일', 'Wednesday', true), toEn('과학', 'science'), toEn('금요일', 'Friday', true),
+      toEn('토요일', 'Saturday'), toEn('피아노', 'piano'), toEn('수요일', 'Wednesday'), toEn('과학', 'science'), toEn('금요일', 'Friday'),
       spell('c l __ s s', '수업', ['a']), spell('M __ n d __ y', '월요일', ['o', 'a']), spell('S __ n d __ y', '일요일', ['u', 'a']), spell('d __ n c __', '무용, 춤', ['a', 'e']), spell('T h __ r s d __ y', '목요일', ['u', 'a']),
       scram('r/c/c/o/e/s', '축구', 'soccer'), scram('h/m/t/a', '수학', 'math'), scram('s/a/T/u/y/e/d', '화요일', 'Tuesday'), scram('o/p/m/r/e/u/c/t', '컴퓨터', 'computer'), scram('t/d/o/y/a', '오늘', 'today'),
       ...[['art', '미술'], ['day', '날, 요일'], ['music', '음악'], ['Saturday', '토요일'], ['piano', '피아노']].map(([e, k], _, arr) => match(e, ['미술', '음악', '날, 요일', '토요일', '피아노'], k)),

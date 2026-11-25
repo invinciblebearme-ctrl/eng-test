@@ -231,6 +231,14 @@ export default {
           const hist = await sb(env, `submission_history?select=attempt,answers,auto,overrides,status,feedback,submitted_at,graded_at&student_id=eq.${r[0].student_id}&concept=eq.${r[0].concept}&order=attempt.asc`);
           return json({ submission: r[0], student: await getStudent(env, r[0].student_id), history: hist.map((h) => ({ ...h, marks: marksOf(h), score: marksOf(h).filter(Boolean).length })) });
         }
+        // AI 연결 확인: 예시 답(개념 11)을 AI에게 보내 보기 — 아무것도 저장하지 않음
+        if (p === '/api/t/ai-check' && req.method === 'POST') {
+          if (!aiOn(env)) return fail('AI 채점 설정(AI_API_URL, AI_API_KEY, AI_MODEL)이 아직 없어요', 503);
+          const c = conceptOf(11), sample = ["It's four thirty", 'nine forty', 'time', 'time', ['What', 'time', 'is', 'it'], 'three thirty', 'ten fourty', '4:30', '9:40', 'is'];
+          const t0 = Date.now();
+          const ai = await aiGrade(env, c, sample, c.questions.map((qq, i) => gradeOne(qq, sample[i])));
+          return json({ ok: true, ms: Date.now() - t0, items: Object.entries(ai).map(([i, v]) => ({ n: +i + 1, answer: sample[i], ok: v.ok, reason: v.reason, why: v.why })) });
+        }
         if (p === '/api/t/ai-grade' && req.method === 'POST') {
           if (!aiOn(env)) return fail('AI 채점 설정(AI_API_URL, AI_API_KEY, AI_MODEL)이 아직 없어요', 503);
           const r = await sb(env, `submissions?select=*&id=eq.${int(body.id)}`);

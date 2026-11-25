@@ -106,6 +106,7 @@ async function drawGrades(quiet) {
     <button class="btn sm pri" id="confirmAll">✔ 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
     <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length}건 · ${aiItems}문항)</button><span id="aiProg" class="small"></span>
     <button class="btn sm" id="reissue">🔁 재출제</button>
+    ${d.aiEnabled ? '<button class="btn sm ghost" id="aiCheck" title="예시 답 2개로 AI 연결을 확인해요 (저장 안 함)">🔌 AI 연결 확인</button>' : ''}
     <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
     <span style="flex:1"></span>
     <button class="btn sm" id="bulkPrint">🖨 결과 출력</button>
@@ -123,6 +124,14 @@ async function drawGrades(quiet) {
   <tr class="avg"><td></td><td class="nm">제출 인원</td>${cnt.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr></tbody></table></div>
   <details class="help"><summary>ⓘ 표 보는 법</summary><p class="small">칸을 누르면 학생 답을 보고 O/X를 고칠 수 있어요. <span class="badge wait">노랑</span> 채점 대기(숫자 뒤 ?) · <span class="badge ok">초록</span> 확정 80% 이상 · <span class="badge no">빨강</span> 확정 80% 미만 · 🤖 AI 채점함 · <b>2차</b> 재출제 후 다시 푼 결과(칸에 마우스를 올리면 이전 점수) · 🔁 재출제되어 아직 다시 안 푼 학생. 학생은 선생님이 확정한 뒤에 결과를 볼 수 있어요. 🔤 단어 시험 · ✍️ 철자 시험 · 📝 단원평가</p></details>`;
   gx.querySelectorAll('[data-sub]').forEach((td) => (td.onclick = () => openSub(+td.dataset.sub)));
+  if ($('#aiCheck')) $('#aiCheck').onclick = async () => {
+    $('#aiCheck').disabled = true; $('#aiCheck').textContent = '🔌 확인 중…';
+    try {
+      const r = await T('/api/t/ai-check', {});
+      alert(`✅ AI 연결 정상 (${(r.ms / 1000).toFixed(1)}초)\n\n` + r.items.map((x) => `예시 ${x.n}번 "${x.answer}" → ${x.ok ? 'O' : 'X'} (${x.why}) ${x.reason}`).join('\n'));
+    } catch (e) { alert('❌ AI 연결 실패\n' + e.message); }
+    $('#aiCheck').disabled = false; $('#aiCheck').textContent = '🔌 AI 연결 확인';
+  };
   $('#regrade').onclick = async () => { const r = await T('/api/t/regrade', { grade: GRADE }); toast(`${GRADE}학년 답 ${r.checked}건 확인, ${r.changed}건 다시 채점했어요`); drawGrades(); };
   gx.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => { GROUP = b.dataset.grp; localStorage.setItem('eng4-grp', GROUP); drawGrades(); }));
   gx.querySelectorAll('[data-uf]').forEach((b) => (b.onclick = () => { UNITF = b.dataset.uf; localStorage.setItem('eng4-unitf', UNITF); drawGrades(); }));

@@ -40,7 +40,7 @@ node test/serve.mjs       # 가짜 Supabase·R2로 로컬 실행 (http://127.0.0
 | `SUPABASE_URL` | Text | Supabase Project URL |
 | `SUPABASE_SERVICE_KEY` | Secret | Supabase secret 키 |
 | `TEACHER_PASSWORD` | Secret | 교사 비밀번호 |
-| `AI_API_URL` · `AI_MODEL` · `AI_API_KEY` | Text·Text·Secret | (선택) AI 채점 — OpenAI 호환 형식 |
+| `AI_API_URL` · `AI_MODEL` · `AI_API_KEY` | Secret | AI 채점 — 전북AI API Gateway (OpenAI 호환) `https://api.baze.co/v1/gateway/chat/completions/`, 모델 `gemini-3.5-flash-lite` |
 
 AI 채점은 토큰을 아끼려고 **판별이 애매한 오답만** 보냄 (`src/triage.js`): 철자 1~2자 차이, 띄어쓰기·문장부호 차이, 말을 덧붙이거나 빠뜨림, 칸 위치 잘못. 빈칸·고르기 문항·전혀 다른 답·대소문자만 틀린 답(대소문자 구별 문항)은 보내지 않고, 보낼 문항이 없으면 AI를 부르지 않음. 규칙 확인: `node test/triage.test.mjs`
 
