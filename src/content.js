@@ -152,8 +152,8 @@ const BASE_CONCEPTS = [
     summary: `
 <div class="cards">
   <div class="card"><h4>소리 구별</h4><ul>
-    <li><span class="en">thirTEEN</span> 13 — 뒤를 길고 세게</li>
-    <li><span class="en">THIRty</span> 30 — 앞을 세게, 끝은 짧게</li>
+    <li><span class="en">thir<u>teen</u></span> 13 — 밑줄 친 뒤를 길고 세게</li>
+    <li><span class="en"><u>thir</u>ty</span> 30 — 밑줄 친 앞을 세게, 끝은 짧게</li>
     <li>시각에서도: 9:40 → <span class="en">nine forty</span></li></ul></div>
   <div class="card dark"><h4>짝으로 익히기</h4>
     <p class="big en">13 thirteen ↔ 30 thirty</p><p class="big en">14 fourteen ↔ 40 forty</p><p class="big en">15 fifteen ↔ 50 fifty</p></div>
