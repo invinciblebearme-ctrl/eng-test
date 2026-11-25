@@ -250,12 +250,26 @@ export default {
           await sb(env, `submissions?id=eq.${id}`, { method: 'PATCH', prefer: 'return=minimal', body: { overrides, feedback: String(body.feedback || '').slice(0, 500) || null, status: graded ? 'graded' : 'submitted', graded_at: graded ? new Date().toISOString() : null } });
           return json({ ok: true });
         }
+        // 일괄 확정 / 확정 취소
+        // body: { grade, class(없으면 학년 전체), concepts:[번호…](없으면 전체), filter:'all'|'perfect'|'ai', undo:true(확정 취소), dry:true(세기만) }
         if (p === '/api/t/confirm-all' && req.method === 'POST') {
-          const c = int(body.class), g = int(body.grade) || 4; if (!c) return fail('반을 골라 주세요');
-          const students = await sb(env, `students?select=id&grade=eq.${g}&class_no=eq.${c}`);
-          if (!students.length) return json({ count: 0 });
-          const r = await sb(env, `submissions?student_id=in.(${students.map((s) => s.id).join(',')})&status=eq.submitted`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'graded', graded_at: new Date().toISOString() } });
-          return json({ count: r.length });
+          const g = int(body.grade) || 4, c = int(body.class);
+          const students = await sb(env, `students?select=id,class_no&grade=eq.${g}${c ? `&class_no=eq.${c}` : ''}`);
+          if (!students.length) return json({ count: 0, byConcept: {}, byClass: {} });
+          const cls = Object.fromEntries(students.map((s) => [s.id, s.class_no]));
+          const ids = Array.isArray(body.concepts) ? body.concepts.map(int).filter((x) => conceptOf(x)) : null;
+          if (ids && !ids.length) return json({ count: 0, byConcept: {}, byClass: {} });
+          let rows = await sb(env, `submissions?select=id,student_id,concept,auto,overrides,ai&status=eq.${body.undo ? 'graded' : 'submitted'}&student_id=in.(${students.map((s) => s.id).join(',')})${ids ? `&concept=in.(${ids.join(',')})` : ''}`);
+          if (!body.undo && body.filter === 'perfect') rows = rows.filter((s) => marksOf(s).every(Boolean));
+          if (!body.undo && body.filter === 'ai') rows = rows.filter((s) => s.ai || marksOf(s).every(Boolean));   // AI 검토를 마쳤거나 만점
+          const byConcept = {}, byClass = {};
+          for (const s of rows) { byConcept[s.concept] = (byConcept[s.concept] || 0) + 1; byClass[cls[s.student_id]] = (byClass[cls[s.student_id]] || 0) + 1; }
+          if (body.dry || !rows.length) return json({ count: rows.length, byConcept, byClass });
+          for (let i = 0; i < rows.length; i += 200) {   // 주소 길이 때문에 나눠서
+            const part = rows.slice(i, i + 200).map((s) => s.id).join(',');
+            await sb(env, `submissions?id=in.(${part})`, { method: 'PATCH', prefer: 'return=minimal', body: body.undo ? { status: 'submitted', graded_at: null } : { status: 'graded', graded_at: new Date().toISOString() } });
+          }
+          return json({ count: rows.length, byConcept, byClass });
         }
         if (p === '/api/t/reset' && req.method === 'POST') {   // 기록 없이 완전히 지우기
           await sb(env, `submissions?id=eq.${int(body.id)}`, { method: 'DELETE', prefer: 'return=minimal' });

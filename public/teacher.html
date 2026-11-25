@@ -101,7 +101,7 @@ async function drawGrades(quiet) {
     ${grp === 'unit' ? `<div class="tabs ufc"><button class="tab ${uf === 'all' ? 'on' : ''}" data-uf="all">전체</button>${units.map(([k, u]) => `<button class="tab ${uf === k ? 'on' : ''}" data-uf="${k}">${esc(u)}</button>`).join('')}</div>` : ''}
   </div>
   <div class="bar actions">
-    <button class="btn sm pri" id="confirmAll" ${waiting ? '' : 'disabled'}>✔ 대기 ${waiting}건 확정</button>
+    <button class="btn sm pri" id="confirmAll">✔ 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
     <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length})</button><span id="aiProg" class="small"></span>
     <button class="btn sm" id="reissue">🔁 재출제</button>
     <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
@@ -138,10 +138,7 @@ async function drawGrades(quiet) {
     }
     toast(`AI 채점 ${ok}건 완료${bad ? `, 실패 ${bad}건` : ''}`); drawGrades();
   };
-  $('#confirmAll').onclick = async () => {
-    if (!confirm(`${GRADE}학년 ${CLS}반 채점 대기 ${waiting}건을 자동 채점 결과 그대로 확정할까요?\n확정하면 학생이 결과를 볼 수 있어요.`)) return;
-    const r = await T('/api/t/confirm-all', { grade: GRADE, class: CLS }); toast(`${r.count}건 확정했어요`); drawGrades();
-  };
+  $('#confirmAll').onclick = () => openConfirm(ids);
 }
 function downloadCSV(d, by) {
   const ids = KG().map((c) => c.id), totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
@@ -201,6 +198,58 @@ async function openSub(id) {
   };
   const close = () => { m.innerHTML = ''; if (VIEW === 'grades') drawGrades(); };
   draw();
+}
+
+// ---------------- 일괄 확정 / 확정 취소 ----------------
+function openConfirm(visibleIds) {
+  const m = $('#modal'), sets = KG();
+  const st = { scope: 'class', undo: false, filter: 'all', sel: new Set(visibleIds), counts: null };
+  const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  const body = (extra) => ({ grade: GRADE, class: st.scope === 'class' ? CLS : null, concepts: [...st.sel], filter: st.filter, undo: st.undo, ...extra });
+  // 시험별 대상 수(전체 시험 기준)를 먼저 세어 둠
+  const loadCounts = async () => {
+    const r = await T('/api/t/confirm-all', { grade: GRADE, class: st.scope === 'class' ? CLS : null, filter: st.filter, undo: st.undo, dry: true });
+    st.counts = r.byConcept;
+    // 처음엔 '보이는 시험 중 대상이 있는 것'만 골라 둠
+    if (!st.touched) st.sel = new Set(visibleIds.filter((id) => st.counts[id]));
+    draw();
+  };
+  const draw = () => {
+    const cnt = (id) => (st.counts ? st.counts[id] || 0 : 0);
+    const total = [...st.sel].reduce((a, id) => a + cnt(id), 0);
+    const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${st.undo ? '↩ 확정 취소' : '✔ 일괄 확정'}</b><button class="btn sm" id="x">닫기</button></div>
+      <div class="tabs seg" style="margin-bottom:10px"><button class="tab ${!st.undo ? 'on' : ''}" data-undo="0">✔ 확정하기</button><button class="tab ${st.undo ? 'on' : ''}" data-undo="1">↩ 확정 취소</button></div>
+      <p class="small muted">${st.undo ? '확정된 결과를 다시 <b>채점 대기</b>로 돌려요. 학생 화면에서 결과가 다시 숨겨져요. (점수·O/X 수정 내용은 그대로)' : '채점 대기 중인 결과를 <b>지금 보이는 점수 그대로</b> 확정해요. 확정하면 학생이 결과를 볼 수 있어요.'}</p>
+      <div class="bar"><b>범위</b>
+        <div class="tabs seg"><button class="tab ${st.scope === 'class' ? 'on' : ''}" data-scope="class">${GRADE}학년 ${CLS}반</button><button class="tab ${st.scope === 'grade' ? 'on' : ''}" data-scope="grade">${GRADE}학년 전체 반</button></div>
+        ${st.undo ? '' : `<b style="margin-left:10px">조건</b><select id="cfFilter" class="field">
+          <option value="all" ${st.filter === 'all' ? 'selected' : ''}>대기 중인 것 모두</option>
+          <option value="perfect" ${st.filter === 'perfect' ? 'selected' : ''}>만점인 것만</option>
+          <option value="ai" ${st.filter === 'ai' ? 'selected' : ''}>🤖 AI 채점을 마친 것(+만점)만</option></select>`}</div>
+      <div class="bar" style="margin:4px 0 6px"><b style="flex:1">시험 (${st.sel.size})</b><button class="btn sm" id="cfAll">대상 있는 것 전체</button><button class="btn sm ghost" id="cfNone">선택 해제</button></div>
+      <div class="pplist">${st.counts == null ? '<p class="muted">세는 중…</p>' : groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((c) => { const n = cnt(c.id); return `<label class="${n ? '' : 'muted'}"><input type="checkbox" data-cf="${c.id}" ${st.sel.has(c.id) ? 'checked' : ''} ${n ? '' : 'disabled'}> ${c.kind === 'concept' ? `${c.id}. ${esc(c.title)}` : kindName[c.kind]} <b>${n ? `${n}건` : ''}</b>${visibleIds.includes(c.id) ? ' <span class="small muted">· 지금 화면</span>' : ''}</label>`; }).join('')}`).join('')}</div>
+      <div class="bar"><span class="small">${st.undo ? '확정 취소' : '확정'}할 결과 <b style="font-size:18px">${total}건</b></span><span style="flex:1"></span>
+        <button class="btn ${st.undo ? 'danger' : 'pri'}" id="cfGo" ${total ? '' : 'disabled'}>${st.undo ? `↩ ${total}건 확정 취소` : `✔ ${total}건 확정`}</button></div>
+    </div></div>`;
+    m.querySelectorAll('[data-undo]').forEach((b) => (b.onclick = () => { st.undo = b.dataset.undo === '1'; st.touched = false; st.counts = null; draw(); loadCounts(); }));
+    m.querySelectorAll('[data-scope]').forEach((b) => (b.onclick = () => { st.scope = b.dataset.scope; st.counts = null; draw(); loadCounts(); }));
+    if ($('#cfFilter')) $('#cfFilter').onchange = () => { st.filter = $('#cfFilter').value; st.counts = null; draw(); loadCounts(); };
+    m.querySelectorAll('[data-cf]').forEach((x) => (x.onchange = () => { st.touched = true; x.checked ? st.sel.add(+x.dataset.cf) : st.sel.delete(+x.dataset.cf); draw(); }));
+    $('#cfAll').onclick = () => { st.touched = true; sets.forEach((c) => cnt(c.id) && st.sel.add(c.id)); draw(); };
+    $('#cfNone').onclick = () => { st.touched = true; st.sel.clear(); draw(); };
+    $('#x').onclick = () => (m.innerHTML = '');
+    $('#bg').onclick = (e) => { if (e.target.id === 'bg') m.innerHTML = ''; };
+    $('#cfGo').onclick = async () => {
+      const where = st.scope === 'class' ? `${GRADE}학년 ${CLS}반` : `${GRADE}학년 전체 반`;
+      if (!confirm(st.undo ? `${where}의 확정된 결과 ${total}건을 채점 대기로 되돌릴까요?\n학생 화면에서 결과가 다시 숨겨져요.` : `${where}의 결과 ${total}건을 확정할까요?\n확정하면 학생이 결과를 볼 수 있어요.`)) return;
+      $('#cfGo').disabled = true;
+      const r = await T('/api/t/confirm-all', body());
+      m.innerHTML = ''; toast(st.undo ? `${r.count}건 확정 취소했어요` : `${r.count}건 확정했어요`); drawGrades();
+    };
+  };
+  draw(); loadCounts();
 }
 
 // ---------------- 재출제 ----------------
