@@ -77,6 +77,36 @@ async function loadMe() {
 function logout() { localStorage.removeItem(LS); TOKEN = null; ME = null; CONCEPTS = []; UNITS = []; $('#ttl').textContent = '2학기 영어'; $('#who').textContent = ''; $('#out').hidden = true; login(); }
 $('#out').onclick = () => { if (confirm('나갈까요?')) logout(); };
 
+// ⭐ 즐겨찾기 추가: 브라우저가 사이트의 즐겨찾기 추가를 막으므로, 기기에 맞는 방법을 크게 안내
+function showBookmarkHelp() {
+  const ua = navigator.userAgent, url = location.origin + '/';
+  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua), mac = !ios && /Mac/i.test(navigator.platform || ua);
+  let how;
+  if (ios) how = `<p class="fav-key">공유 <span class="k">⬆︎</span> 버튼</p><p>화면 위나 아래의 <b>공유 버튼</b>을 누른 뒤<br><b>‘책갈피 추가’</b> 또는 <b>‘홈 화면에 추가’</b>를 눌러요.</p>`;
+  else if (android) how = `<p class="fav-key">메뉴 <span class="k">⋮</span> → <span class="k">☆</span></p><p>브라우저 오른쪽 위 <b>⋮ 메뉴</b>를 누른 뒤<br><b>☆(별)</b> 또는 <b>‘홈 화면에 추가’</b>를 눌러요.</p>`;
+  else how = `<p class="fav-key"><span class="k">${mac ? '⌘' : 'Ctrl'}</span> + <span class="k">D</span></p><p>키보드에서 <b>${mac ? '⌘(command)' : 'Ctrl'}</b> 키를 누른 채 <b>D</b>를 누르면<br>즐겨찾기(북마크) 창이 열려요. <b>완료</b>를 눌러요.</p><p class="small muted">주소창 오른쪽 끝의 ☆(별)을 눌러도 돼요.</p>`;
+  const m = document.createElement('div');
+  m.className = 'modal'; m.id = 'favModal';
+  m.innerHTML = `<div class="box" style="max-width:520px;text-align:center">
+    <h2 style="margin-top:0">⭐ 즐겨찾기 추가</h2>
+    <p class="muted">다음부터 이 주소로 바로 들어올 수 있어요</p>
+    <div class="fav-how">${how}</div>
+    <p class="fav-url">${esc(url)}</p>
+    <div class="bar" style="justify-content:center"><button class="btn" id="favCopy">📋 주소 복사</button><button class="btn pri" id="favOk">알겠어요</button></div></div>`;
+  document.body.appendChild(m);
+  const close = () => m.remove();
+  m.onclick = (e) => { if (e.target === m) close(); };
+  m.querySelector('#favOk').onclick = close;
+  m.querySelector('#favCopy').onclick = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(url); ok = true; } catch {
+      const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch {} ta.remove();
+    }
+    ok ? toast('주소를 복사했어요 📋') : prompt('이 주소를 복사하세요', url);
+  };
+}
 function login(msg) {
   app.innerHTML = `<div class="center-screen"><h2>안녕하세요! 👋</h2><p class="lead">이름과 학생 계정 ID를 써서 들어와요.${GO ? '<br><b>들어가면 바로 시험이 열려요.</b>' : ''}</p>
   <form id="lf" class="card">
@@ -86,7 +116,9 @@ function login(msg) {
     <input id="sid" class="field" style="width:100%;font-size:19px;margin:4px 0 14px" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: 00gs00e000">
     <div id="lmsg">${msg ? `<div class="notice">${esc(msg)}</div>` : ''}</div>
     <button class="btn pri" style="width:100%;margin-top:6px">들어가기</button>
-  </form></div>`;
+  </form></div>
+  <button type="button" class="favbtn" id="fav">⭐ 즐겨찾기 추가</button>`;
+  $('#fav').onclick = showBookmarkHelp;
   $('#nm').focus();
   $('#lf').onsubmit = async (e) => {
     e.preventDefault();

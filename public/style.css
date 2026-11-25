@@ -247,3 +247,12 @@ button.lkqr:hover .zoomhint{opacity:1}
 .pvbar{position:sticky;top:56px;z-index:4;background:#efe6ff;border:1px solid #cdb6f5;border-radius:12px;padding:6px 12px;margin:8px 0;display:flex;gap:8px;align-items:center;font-size:14px}
 .pvbar span.pvt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pvbar select{max-width:320px;padding:5px 8px;font-size:14px}
+
+/* 로그인 화면 즐겨찾기 버튼 (가운데 아래) */
+.favbtn{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:6;border:2px solid var(--line);background:#fff;border-radius:999px;padding:12px 26px;font-size:18px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.favbtn:hover{border-color:var(--acc);color:var(--acc)}
+.center-screen{padding-bottom:90px}
+.fav-how{background:var(--bg);border-radius:14px;padding:18px;margin:14px 0}
+.fav-key{font-size:30px;font-weight:800;margin:0 0 8px}
+.fav-key .k{display:inline-block;min-width:54px;padding:6px 12px;border:2px solid var(--ink);border-bottom-width:5px;border-radius:10px;background:#fff;font-family:inherit}
+.fav-url{font-family:ui-monospace,monospace;color:#b2391a;word-break:break-all}
