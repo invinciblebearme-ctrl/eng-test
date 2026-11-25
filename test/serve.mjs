@@ -1,7 +1,7 @@
 // 로컬 테스트: 가짜 PostgREST(:8788) + Worker(:8787)
 import http from 'node:http';
 import worker from '../src/worker.js';
-const db = { students: [], submissions: [], test_settings: [], submission_history: [] }; let seq = 1;
+const db = { students: [], submissions: [], test_settings: [], submission_history: [], ai_reports: [] }; let seq = 1;
 const parse = (sp) => { const f = []; let order = null; for (const [k, v] of sp) { if (k === 'select' || k === 'on_conflict') continue; if (k === 'order') { order = v; continue; } let [op, ...rest] = v.split('.'); let neg = false; if (op === 'not') { neg = true; op = rest.shift(); } const val = rest.join('.'); f.push([k, op, op === 'in' ? val.slice(1, -1).split(',') : val, neg]); } return { f, order }; };
 const match = (r, f) => f.every(([k, op, v, neg]) => neg !== (op === 'eq' ? String(r[k]) === v : op === 'in' ? v.includes(String(r[k])) : op === 'cs' ? v.slice(1, -1).split(',').map((x) => x.replace(/"/g, '')).every((x) => (r[k] || []).includes(x)) : true));
 http.createServer(async (req, res) => {

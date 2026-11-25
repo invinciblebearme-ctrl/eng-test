@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
-  <div class="tabs" id="nav" hidden><button class="tab on" data-v="grades">채점·성적</button><button class="tab" data-v="roster">명렬표</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="links">🔓 시험 열기·링크</button></div>
+  <div class="tabs" id="nav" hidden><button class="tab on" data-v="grades">채점·성적</button><button class="tab" data-v="roster">명렬표</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="reports">📊 분석</button></div>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
 <main class="wrap" id="app"></main>
 <div id="modal"></div>
@@ -45,10 +45,23 @@ async function boot() {
   await loadClosed();
   $('#nav').hidden = false; $('#out').hidden = false; go('grades');
 }
+// ---------------- 분석 (Claude 예약 작업이 남긴 보고서) ----------------
+async function reportsView() {
+  app.innerHTML = `<div class="ctx">${gradeTabs()}</div><h2>📊 결과 분석</h2>
+    <p class="small muted">Claude 예약 작업이 정해진 시간마다 학생 답을 살펴보고 남긴 보고서예요. 같은 작업이 애매한 답에 🤖 O/X 제안을, 학생별로 💬 피드백 초안을 남겨요. 모두 <b>선생님이 확정하기 전에는 학생에게 보이지 않아요.</b></p>
+    <div id="rp"><p class="muted">불러오는 중…</p></div>`;
+  bindCls(reportsView);
+  let d; try { d = await T('/api/t/reports?grade=' + GRADE); } catch (e) { $('#rp').innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  const md = (t) => esc(t).replace(/^### (.*)$/gm, '<h4>$1</h4>').replace(/^## (.*)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^- (.*)$/gm, '• $1');
+  $('#rp').innerHTML = d.reports.length ? d.reports.map((r, k) => `<details class="help" ${k ? '' : 'open'} style="margin:10px 0"><summary><b>${esc(r.title)}</b> <span class="muted small">${new Date(r.created_at).toLocaleString('ko-KR')}</span></summary>
+      <div style="white-space:pre-wrap;line-height:1.6;margin-top:8px">${md(r.body)}</div><div class="bar"><span style="flex:1"></span><button class="btn sm ghost" data-del="${r.id}">삭제</button></div></details>`).join('')
+    : '<div class="notice">아직 보고서가 없어요. 예약 작업이 처음 돌면 여기에 나와요.</div>';
+  app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => { if (!confirm('이 보고서를 지울까요?')) return; await T('/api/t/report-delete', { id: +b.dataset.del }); reportsView(); }));
+}
 function go(v) {
   VIEW = v; clearInterval(timer);
   document.querySelectorAll('#nav .tab').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
-  ({ grades, roster, key: keyView, links: linksView })[v]();
+  ({ grades, roster, key: keyView, links: linksView, reports: reportsView })[v]();
 }
 const KORD = { concept: 0, word: 1, spelltest: 2, exam: 3 }, unitNo = (c) => (c.kind === 'concept' ? 0 : parseInt(c.unit, 10) || 99);
 const KG = () => KEY.filter((c) => c.grade === GRADE).sort((a, b) => (a.kind === 'concept') - (b.kind === 'concept') ? (b.kind === 'concept') - (a.kind === 'concept') : unitNo(a) - unitNo(b) || KORD[a.kind] - KORD[b.kind] || a.id - b.id);
@@ -117,7 +130,7 @@ async function drawGrades(quiet) {
     const mine = ids.map((cid) => by[s.id + ':' + cid]);
     const got = mine.filter(Boolean);
     return `<tr><td>${s.number}</td><td class="nm">${esc(s.name)}</td>${mine.map((x, k) => x
-      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup>🤖</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
+      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup>🤖</sup>' : ''}${x.draft ? '<sup>💬</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
       : hby[s.id + ':' + ids[k]] ? `<td class="muted" title="이전: ${histTip(s.id, ids[k])}">🔁</td>` : `<td class="muted">·</td>`).join('')}<td>${got.length}</td><td>${got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) + '%' : '-'}</td></tr>`;
   }).join('')}
   <tr class="avg"><td></td><td class="nm">반 평균</td>${avg.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr>
@@ -182,6 +195,7 @@ async function openSub(id) {
         <div class="auto">자동: ${s.auto[i] ? 'O' : 'X'}${marks[i] !== s.auto[i] ? ' → 수정함' : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}${s.ai[i].why ? ` <span class="muted">(${esc(s.ai[i].why)})</span>` : ''}</div>` : ''}`).join('')}
       <h3>점수: ${score} / ${c.questions.length}${(s.attempt || 1) > 1 ? ` <span class="badge">${s.attempt}차</span>` : ''}</h3>
       ${(d.history || []).length ? `<details class="help" open><summary>📚 이전 기록 ${d.history.length}개</summary><table class="plain small" style="margin-top:6px"><tr><th>차수</th><th>점수</th><th>문항별 (O/X)</th><th>채점일</th></tr>${d.history.map((h) => `<tr><td>${h.attempt}차</td><td><b>${h.score}</b> / ${c.questions.length}</td><td style="font-family:monospace">${h.marks.map((mk, i) => `<span style="color:${mk ? 'var(--ok)' : 'var(--no)'}" title="${i + 1}번">${mk ? 'O' : 'X'}</span>`).join('')}</td><td>${fmtDate(h.graded_at) || '채점 전'}</td></tr>`).join('')}</table></details>` : ''}
+      ${s.feedback_draft ? `<div class="notice small" style="margin:8px 0">💬 <b>AI 피드백 초안</b> (아직 학생에게 안 보여요): ${esc(s.feedback_draft)} <button class="btn sm" id="useDraft">↓ 아래 칸에 넣기</button></div>` : ''}
       <label class="small muted">학생에게 남길 말 (선택)</label><textarea id="fbk" placeholder="예: 요일 첫 글자는 대문자로 써요!">${esc(s.feedback || '')}</textarea>
       <div class="bar"><button class="btn pri" id="ok">채점 확정 (학생에게 결과 공개)</button><button class="btn" id="save">저장만 (채점 대기 유지)</button><button class="btn" id="aiOne">🤖 AI 채점</button><span style="flex:1"></span><button class="btn" id="redo">🔁 다시 풀게 하기 (기록 남김)</button><button class="btn sm danger" id="reset" title="기록 없이 이 답을 완전히 지워요">완전 삭제</button></div>
     </div></div>`;
@@ -193,6 +207,7 @@ async function openSub(id) {
       await T('/api/t/grade', { id, overrides, feedback: $('#fbk').value, status });
       toast(status === 'graded' ? '확정했어요' : '저장했어요'); close();
     };
+    if ($('#useDraft')) $('#useDraft').onclick = () => { $('#fbk').value = s.feedback_draft; $('#fbk').focus(); };
     $('#ok').onclick = () => save('graded');
     $('#save').onclick = () => save('submitted');
     $('#aiOne').onclick = async () => {
@@ -214,9 +229,9 @@ async function openSub(id) {
 // ---------------- 일괄 확정 / 확정 취소 ----------------
 function openConfirm(visibleIds) {
   const m = $('#modal'), sets = KG();
-  const st = { scope: 'class', undo: false, filter: 'all', sel: new Set(visibleIds), counts: null };
+  const st = { scope: 'class', undo: false, filter: 'all', sel: new Set(visibleIds), counts: null, useDraft: true };
   const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
-  const body = (extra) => ({ grade: GRADE, class: st.scope === 'class' ? CLS : null, concepts: [...st.sel], filter: st.filter, undo: st.undo, ...extra });
+  const body = (extra) => ({ grade: GRADE, class: st.scope === 'class' ? CLS : null, concepts: [...st.sel], filter: st.filter, undo: st.undo, useDraft: st.useDraft, ...extra });
   // 시험별 대상 수(전체 시험 기준)를 먼저 세어 둠
   const loadCounts = async () => {
     const r = await T('/api/t/confirm-all', { grade: GRADE, class: st.scope === 'class' ? CLS : null, filter: st.filter, undo: st.undo, dry: true });
@@ -241,6 +256,7 @@ function openConfirm(visibleIds) {
           <option value="ai" ${st.filter === 'ai' ? 'selected' : ''}>🤖 AI 채점을 마친 것(+만점)만</option></select>`}</div>
       <div class="bar" style="margin:4px 0 6px"><b style="flex:1">시험 (${st.sel.size})</b><button class="btn sm" id="cfAll">대상 있는 것 전체</button><button class="btn sm ghost" id="cfNone">선택 해제</button></div>
       <div class="pplist">${st.counts == null ? '<p class="muted">세는 중…</p>' : groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((c) => { const n = cnt(c.id); return `<label class="${n ? '' : 'muted'}"><input type="checkbox" data-cf="${c.id}" ${st.sel.has(c.id) ? 'checked' : ''} ${n ? '' : 'disabled'}> ${c.kind === 'concept' ? `${c.id}. ${esc(c.title)}` : kindName[c.kind]} <b>${n ? `${n}건` : ''}</b>${visibleIds.includes(c.id) ? ' <span class="small muted">· 지금 화면</span>' : ''}</label>`; }).join('')}`).join('')}</div>
+      ${st.undo ? '' : `<label class="small" style="display:block;margin:6px 0"><input type="checkbox" id="cfDraft" ${st.useDraft ? 'checked' : ''}> 💬 AI 피드백 초안도 함께 학생에게 공개 (선생님이 쓴 말이 없는 것만)</label>`}
       <div class="bar"><span class="small">${st.undo ? '확정 취소' : '확정'}할 결과 <b style="font-size:18px">${total}건</b></span><span style="flex:1"></span>
         <button class="btn ${st.undo ? 'danger' : 'pri'}" id="cfGo" ${total ? '' : 'disabled'}>${st.undo ? `↩ ${total}건 확정 취소` : `✔ ${total}건 확정`}</button></div>
     </div></div>`;
@@ -248,6 +264,7 @@ function openConfirm(visibleIds) {
     m.querySelectorAll('[data-scope]').forEach((b) => (b.onclick = () => { st.scope = b.dataset.scope; st.counts = null; draw(); loadCounts(); }));
     if ($('#cfFilter')) $('#cfFilter').onchange = () => { st.filter = $('#cfFilter').value; st.counts = null; draw(); loadCounts(); };
     m.querySelectorAll('[data-cf]').forEach((x) => (x.onchange = () => { st.touched = true; x.checked ? st.sel.add(+x.dataset.cf) : st.sel.delete(+x.dataset.cf); draw(); }));
+    if ($('#cfDraft')) $('#cfDraft').onchange = () => (st.useDraft = $('#cfDraft').checked);
     $('#cfAll').onclick = () => { st.touched = true; sets.forEach((c) => cnt(c.id) && st.sel.add(c.id)); draw(); };
     $('#cfNone').onclick = () => { st.touched = true; st.sel.clear(); draw(); };
     $('#x').onclick = () => (m.innerHTML = '');
@@ -257,7 +274,7 @@ function openConfirm(visibleIds) {
       if (!confirm(st.undo ? `${where}의 확정된 결과 ${total}건을 채점 대기로 되돌릴까요?\n학생 화면에서 결과가 다시 숨겨져요.` : `${where}의 결과 ${total}건을 확정할까요?\n확정하면 학생이 결과를 볼 수 있어요.`)) return;
       $('#cfGo').disabled = true;
       const r = await T('/api/t/confirm-all', body());
-      m.innerHTML = ''; toast(st.undo ? `${r.count}건 확정 취소했어요` : `${r.count}건 확정했어요`); drawGrades();
+      m.innerHTML = ''; toast(st.undo ? `${r.count}건 확정 취소했어요` : `${r.count}건 확정했어요${r.drafts ? ` · 피드백 ${r.drafts}건 공개` : ''}`); drawGrades();
     };
   };
   draw(); loadCounts();

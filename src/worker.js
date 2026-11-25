@@ -199,7 +199,7 @@ export default {
         const attempt = prev.reduce((m, x) => Math.max(m, x.attempt), 0) + 1;
         await sb(env, 'submissions?on_conflict=student_id,concept', {
           method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
-          body: [{ student_id: st.id, concept: c.id, attempt, answers: clean, auto, overrides: {}, ai: null, status: 'submitted', feedback: null, submitted_at: new Date().toISOString(), graded_at: null }],
+          body: [{ student_id: st.id, concept: c.id, attempt, answers: clean, auto, overrides: {}, ai: null, status: 'submitted', feedback: null, feedback_draft: null, submitted_at: new Date().toISOString(), graded_at: null }],
         });
         return json({ ok: true });
       }
@@ -223,7 +223,7 @@ export default {
             subs = await sb(env, `submissions?select=id,student_id,concept,status,answers,auto,overrides,ai,submitted_at,attempt&student_id=in.(${ids})`);
             hist = await sb(env, `submission_history?select=student_id,concept,attempt,auto,overrides,status,graded_at&student_id=in.(${ids})&order=attempt.asc`);
           }
-          return json({ students, submissions: subs.map((s) => ({ id: s.id, student_id: s.student_id, concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt || 1, ai: !!s.ai, aiNeed: s.status !== 'graded' && !s.ai && conceptOf(s.concept) ? aiTargets(conceptOf(s.concept), s.answers, marksOf(s)).length : 0, score: marksOf(s).filter(Boolean).length })),
+          return json({ students, submissions: subs.map((s) => ({ id: s.id, student_id: s.student_id, concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt || 1, ai: !!s.ai, draft: !!s.feedback_draft && !s.feedback, aiNeed: s.status !== 'graded' && !s.ai && conceptOf(s.concept) ? aiTargets(conceptOf(s.concept), s.answers, marksOf(s)).length : 0, score: marksOf(s).filter(Boolean).length })),
             history: hist.map((h) => ({ student_id: h.student_id, concept: h.concept, attempt: h.attempt, status: h.status, graded_at: h.graded_at, score: marksOf(h).filter(Boolean).length })), aiEnabled: aiOn(env) });
         }
         // 일괄 출력용: 한 반의 학생과 제출 답(자세히)
@@ -281,7 +281,7 @@ export default {
           const cls = Object.fromEntries(students.map((s) => [s.id, s.class_no]));
           const ids = Array.isArray(body.concepts) ? body.concepts.map(int).filter((x) => conceptOf(x)) : null;
           if (ids && !ids.length) return json({ count: 0, byConcept: {}, byClass: {} });
-          let rows = await sb(env, `submissions?select=id,student_id,concept,auto,overrides,ai&status=eq.${body.undo ? 'graded' : 'submitted'}&student_id=in.(${students.map((s) => s.id).join(',')})${ids ? `&concept=in.(${ids.join(',')})` : ''}`);
+          let rows = await sb(env, `submissions?select=id,student_id,concept,auto,overrides,ai,feedback,feedback_draft&status=eq.${body.undo ? 'graded' : 'submitted'}&student_id=in.(${students.map((s) => s.id).join(',')})${ids ? `&concept=in.(${ids.join(',')})` : ''}`);
           if (!body.undo && body.filter === 'perfect') rows = rows.filter((s) => marksOf(s).every(Boolean));
           if (!body.undo && body.filter === 'ai') rows = rows.filter((s) => s.ai || marksOf(s).every(Boolean));   // AI 검토를 마쳤거나 만점
           const byConcept = {}, byClass = {};
@@ -291,8 +291,13 @@ export default {
             const part = rows.slice(i, i + 200).map((s) => s.id).join(',');
             await sb(env, `submissions?id=in.(${part})`, { method: 'PATCH', prefer: 'return=minimal', body: body.undo ? { status: 'submitted', graded_at: null } : { status: 'graded', graded_at: new Date().toISOString() } });
           }
-          return json({ count: rows.length, byConcept, byClass });
+          // 피드백 초안도 함께 공개 (선생님이 쓴 말이 없는 것만)
+          if (!body.undo && body.useDraft) for (const s of rows) if (s.feedback_draft && !s.feedback) await sb(env, `submissions?id=eq.${s.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { feedback: s.feedback_draft.slice(0, 500) } });
+          return json({ count: rows.length, byConcept, byClass, drafts: rows.filter((s) => s.feedback_draft && !s.feedback).length });
         }
+        // Claude 예약 작업이 남긴 분석 보고서
+        if (p === '/api/t/reports') return json({ reports: await sb(env, `ai_reports?select=*&grade=eq.${int(q.get('grade')) || 4}&order=created_at.desc&limit=20`) });
+        if (p === '/api/t/report-delete' && req.method === 'POST') { await sb(env, `ai_reports?id=eq.${int(body.id)}`, { method: 'DELETE', prefer: 'return=minimal' }); return json({ ok: true }); }
         if (p === '/api/t/reset' && req.method === 'POST') {   // 기록 없이 완전히 지우기
           await sb(env, `submissions?id=eq.${int(body.id)}`, { method: 'DELETE', prefer: 'return=minimal' });
           return json({ ok: true });
@@ -306,7 +311,7 @@ export default {
             subs = await sb(env, `submissions?select=*&concept=eq.${c.id}&student_id=in.(${ids.join(',')})`);
           }
           if (!subs.length) return json({ count: 0 });
-          await sb(env, 'submission_history', { method: 'POST', prefer: 'return=minimal', body: subs.map((s) => ({ student_id: s.student_id, concept: s.concept, attempt: s.attempt || 1, answers: s.answers, auto: s.auto, overrides: s.overrides || {}, ai: s.ai, status: s.status, feedback: s.feedback, submitted_at: s.submitted_at, graded_at: s.graded_at })) });
+          await sb(env, 'submission_history', { method: 'POST', prefer: 'return=minimal', body: subs.map((s) => ({ student_id: s.student_id, concept: s.concept, attempt: s.attempt || 1, answers: s.answers, auto: s.auto, overrides: s.overrides || {}, ai: s.ai, status: s.status, feedback: s.feedback, feedback_draft: s.feedback_draft, submitted_at: s.submitted_at, graded_at: s.graded_at })) });
           await sb(env, `submissions?id=in.(${subs.map((s) => s.id).join(',')})`, { method: 'DELETE', prefer: 'return=minimal' });
           // 닫힌 시험이면 함께 열기 (선택)
           if (body.open) await sb(env, 'test_settings?on_conflict=concept', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [...new Set(subs.map((s) => s.concept))].map((concept) => ({ concept, enabled: true, updated_at: new Date().toISOString() })) });
