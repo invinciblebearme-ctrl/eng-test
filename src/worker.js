@@ -153,10 +153,8 @@ export default {
       if (p === '/api/summary') {
         const st = await studentFrom(env, req);
         const c = conceptOf(q.get('concept')); if (!c || c.grade !== st.grade) return fail('번호가 잘못됐어요');
-        if (c.kind !== 'concept') {
-          const r = await sb(env, `submissions?select=id&student_id=eq.${st.id}&concept=eq.${c.id}`);
-          if (!r.length) return fail('시험을 본 뒤에 확인할 수 있어요', 403);
-        }
+        const r = await sb(env, `submissions?select=id&student_id=eq.${st.id}&concept=eq.${c.id}`);
+        if (!r.length) return fail('문제를 푼 뒤에 확인할 수 있어요', 403);
         return json({ summary: c.summary });
       }
       if (p === '/api/submission') {

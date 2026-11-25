@@ -43,7 +43,7 @@ async function previewMode(id) {
   app.innerHTML = `<div class="pvbar"><span class="pvt"><b>👀 교사 미리보기</b> · 풀어 볼 수 있지만 <b>제출·저장되지 않아요</b></span>
       <select id="pvSel" class="field">${same.map((x) => `<option value="${x.id}" ${x.id === id ? 'selected' : ''}>${esc(x.kind === 'concept' ? `개념 ${x.id} · ${x.title}` : x.title)}</option>`).join('')}</select></div>
     <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2><p class="lead">${esc(c.lead || '')}</p>
-    ${c.kind !== 'concept' ? '<div class="notice small">🔒 학생에게는 아래 정리가 <b>시험을 낸 뒤에만</b> 보여요. (교사 미리보기라서 보임)</div>' : ''}
+    <div class="notice small">🔒 학생에게는 아래 정리가 <b>문제를 낸 뒤에만</b> 보여요. (교사 미리보기라서 보임)</div>
     <div id="sum">${fillSummary(c.summary)}</div>
     <h2 style="margin-top:28px">✏️ ${c.kind === 'concept' ? '확인 문제' : esc(c.title)} <span class="muted small">(${c.questions.length}문제)</span></h2>
     <div id="qarea">${c.questions.map((q, i) => `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div><div class="mark"></div></div>${mediaHTML(q)}<div class="ans"></div><div class="fb pvans" hidden>정답: <span class="right">${optLabel(q.answerText)}</span></div></div>`).join('')}</div>
@@ -167,12 +167,12 @@ async function concept(id) {
   const c = CONCEPTS.find((x) => x.id === id);
   const s = SUBS[id];
   app.innerHTML = `<button class="btn sm" id="back">← 개념 목록</button>
-  <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2><p class="lead">${esc(c.lead)}${c.locked ? '' : ' <span class="small">(영어를 누르면 소리가 나와요 🔊)</span>'}</p>
-  <div id="sum">${c.locked ? (s ? '<p class="muted">정리 내용을 불러오는 중…</p>' : '<div class="notice">🔒 낱말·표현 정리는 시험을 본 뒤에 볼 수 있어요.</div>') : fillSummary(c.summary)}</div>
+  <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2><p class="lead">${esc(c.lead)}${c.hidden && !s ? '' : ' <span class="small">(영어를 누르면 소리가 나와요 🔊)</span>'}</p>
+  <div id="sum">${c.hidden ? (s ? '<p class="muted">정리 내용을 불러오는 중…</p>' : `<div class="notice">🔒 ${c.kind === 'concept' ? '개념 정리는 확인 문제를 푼 뒤에' : '낱말·표현 정리는 시험을 본 뒤에'} 볼 수 있어요.</div>`) : fillSummary(c.summary)}</div>
   <div id="qarea"></div>`;
   $('#back').onclick = home;
-  if (c.locked && s) {
-    try { $('#sum').innerHTML = `<h3 class="grp">📖 정리 (시험을 봐서 열렸어요)</h3>${fillSummary((await S(`/api/summary?concept=${id}`)).summary)}`; } catch (e) { $('#sum').innerHTML = ''; }
+  if (c.hidden && s) {
+    try { $('#sum').innerHTML = `<h3 class="grp">📖 정리 (${c.kind === 'concept' ? '확인 문제를 풀어서' : '시험을 봐서'} 열렸어요)</h3>${fillSummary((await S(`/api/summary?concept=${id}`)).summary)}`; } catch (e) { $('#sum').innerHTML = ''; }
   }
   bindSpeak($('#sum'));
   const qa = $('#qarea');
@@ -193,7 +193,7 @@ async function concept(id) {
 }
 
 function quiz(c, prev) {
-  if (c.locked) $('#sum').innerHTML = '<div class="notice">🔒 시험 보는 동안에는 정리를 볼 수 없어요.</div>';
+  if (c.hidden) $('#sum').innerHTML = `<div class="notice">🔒 ${c.kind === 'concept' ? '문제를 푸는' : '시험 보는'} 동안에는 정리를 볼 수 없어요.</div>`;
   const ans = c.questions.map((q, i) => (prev && prev[i] != null ? prev[i] : (q.t === 'multi' ? Array(q.blanks).fill('') : q.t === 'spellmean' ? ['', ''] : q.t === 'spell' ? Array((q.pat.match(/__/g) || []).length).fill('') : q.t === 'pick' || q.t === 'order' ? [] : '')));
   const qa = $('#qarea');
   qa.innerHTML = `<h2 style="margin-top:28px">✏️ ${c.kind === 'concept' ? '확인 문제' : esc(c.title)}</h2>` + c.questions.map((q, i) => `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div></div>${mediaHTML(q)}<div class="ans"></div></div>`).join('') +

@@ -514,10 +514,12 @@ export function answerText(q) {
 
 // 학생에게 보내는 문제 (정답 제거)
 export function publicConcepts(grade) {
-  // 시험(낱말·철자·단원평가)은 정리 내용을 숨김 → 제출한 뒤 /api/summary 로만 받음
+  // 정리 내용은 모두 숨김 → 문제를 제출한 뒤 /api/summary 로만 받음
+  // locked = 한 번만 낼 수 있는 시험(낱말·철자·단원평가), hidden = 제출 전 정리 숨김(모든 세트)
   return CONCEPTS.filter((c) => grade == null || c.grade === grade).map(({ questions, summary, ...c }) => ({
     ...c,
-    summary: c.kind === 'concept' ? summary : '',
+    summary: '',
+    hidden: true,
     locked: c.kind !== 'concept',
     questions: questions.map(({ a, ...q }) => ({ ...q, blanks: q.t === 'multi' ? a.length : undefined, pending: a == null || undefined, end: q.t === 'order' ? (q.join === '' ? '' : (a.match(/[.?!]$/) || ['.'])[0]) : undefined })),
   }));
