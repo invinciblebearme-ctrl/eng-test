@@ -192,18 +192,86 @@ function bindReview() {
     }
   };
 }
-// ---------------- 분석 (Claude 예약 작업이 남긴 보고서) ----------------
+// ---------------- 📊 분석: 실시간 대시보드 + Claude 예약 작업 보고서 ----------------
+const AN = { cls: 0, kind: 'concept' };
 async function reportsView() {
-  app.innerHTML = `<div class="ctx">${gradeTabs()}</div><h2>📊 결과 분석</h2>
-    <p class="small muted">Claude 예약 작업이 정해진 시간마다 학생 답을 살펴보고 남긴 보고서예요. 같은 작업이 애매한 답에 🤖 O/X 제안을, 학생별로 💬 피드백 초안을 남겨요. 모두 <b>선생님이 확정하기 전에는 학생에게 보이지 않아요.</b></p>
-    <div id="rp"><p class="muted">불러오는 중…</p></div>`;
-  bindCls(reportsView);
-  let d; try { d = await T('/api/t/reports?grade=' + GRADE); } catch (e) { $('#rp').innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  const hasC = KG().some((c) => c.kind === 'concept'); if (!hasC && AN.kind === 'concept') AN.kind = 'unit';
+  app.innerHTML = `<div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs"><button class="tab ${AN.cls === 0 ? 'on' : ''}" data-acls="0">전체 반</button>${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === AN.cls ? 'on' : ''}" data-acls="${n}">${n}반</button>`).join('')}</div></div>
+    <div class="bar view">${hasC ? `<div class="tabs seg"><button class="tab ${AN.kind === 'concept' ? 'on' : ''}" data-akind="concept">📘 기본 개념</button><button class="tab ${AN.kind === 'unit' ? 'on' : ''}" data-akind="unit">📝 단원 평가</button></div>` : ''}<span class="small muted">학생 답으로 바로 계산해요 (확정 전 답 포함)</span></div>
+    <div id="an"><p class="muted">계산하는 중…</p></div>
+    <h2 style="margin-top:28px">🤖 AI 분석 보고서</h2><p class="small muted">Claude 예약 작업이 평일 오후에 남긴 글이에요.</p><div id="rp"><p class="muted">불러오는 중…</p></div>`;
+  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); AN.cls = 0; reportsView(); }));
+  app.querySelectorAll('[data-acls]').forEach((b) => (b.onclick = () => { AN.cls = +b.dataset.acls; reportsView(); }));
+  app.querySelectorAll('[data-akind]').forEach((b) => (b.onclick = () => { AN.kind = b.dataset.akind; reportsView(); }));
+  const my = ++DRAW_SEQ;
+  const [d, rp] = await Promise.all([T(`/api/t/review?grade=${GRADE}&class=${AN.cls || ''}&state=all`).catch((e) => ({ err: e })), T('/api/t/reports?grade=' + GRADE).catch((e) => ({ err: e }))]);
+  if (my !== DRAW_SEQ || VIEW !== 'reports') return;
+  if (d.err) $('#an').innerHTML = `<div class="notice">${esc(d.err.message)}</div>`; else drawDash(d);
+  if (rp.err) { $('#rp').innerHTML = `<div class="notice">${esc(rp.err.message)}</div>`; return; }
   const md = (t) => esc(t).replace(/^### (.*)$/gm, '<h4>$1</h4>').replace(/^## (.*)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^- (.*)$/gm, '• $1');
-  $('#rp').innerHTML = d.reports.length ? d.reports.map((r, k) => `<details class="help" ${k ? '' : 'open'} style="margin:10px 0"><summary><b>${esc(r.title)}</b> <span class="muted small">${new Date(r.created_at).toLocaleString('ko-KR')}</span></summary>
+  $('#rp').innerHTML = rp.reports.length ? rp.reports.map((r, k) => `<details class="help" ${k ? '' : 'open'} style="margin:10px 0"><summary><b>${esc(r.title)}</b> <span class="muted small">${new Date(r.created_at).toLocaleString('ko-KR')}</span></summary>
       <div style="white-space:pre-wrap;line-height:1.6;margin-top:8px">${md(r.body)}</div><div class="bar"><span style="flex:1"></span><button class="btn sm ghost" data-del="${r.id}">삭제</button></div></details>`).join('')
     : '<div class="notice">아직 보고서가 없어요. 예약 작업이 처음 돌면 여기에 나와요.</div>';
   app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => { if (!confirm('이 보고서를 지울까요?')) return; await T('/api/t/report-delete', { id: +b.dataset.del }); reportsView(); }));
+}
+const pct = (x) => Math.round(x * 100);
+const barHTML = (v, label, tip) => `<div class="hb" title="${esc(tip || '')}"><div class="hbt"><i style="width:${Math.max(1, pct(v))}%"></i></div><b>${label}</b></div>`;
+function drawDash(d) {
+  const sets = KG().filter((c) => (AN.kind === 'concept' ? c.kind === 'concept' : c.kind !== 'concept'));
+  const setIds = new Set(sets.map((c) => c.id)), stBy = Object.fromEntries(d.students.map((x) => [x.id, x]));
+  const subs = d.items.filter((r) => setIds.has(r.concept) && stBy[r.student_id]).map((r) => {
+    const c = KEY.find((x) => x.id === r.concept), marks = c.questions.map((_, i) => (r.overrides && r.overrides[i] != null ? !!r.overrides[i] : !!r.auto[i]));
+    return { ...r, c, st: stBy[r.student_id], marks, rate: marks.filter(Boolean).length / c.questions.length };
+  });
+  const el = $('#an');
+  if (!subs.length) { el.innerHTML = '<div class="notice">아직 제출한 답이 없어요.</div>'; return; }
+  const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const wait = subs.filter((r) => r.status !== 'graded').length, unpub = subs.filter((r) => r.status === 'graded' && !r.feedback && r.feedback_draft).length;
+  const subStudents = new Set(subs.map((r) => r.student_id)).size;
+  // 반별
+  const classes = [...new Set(d.students.map((x) => x.class_no))].sort((a, b) => a - b);
+  const byClass = classes.map((cn) => { const xs = subs.filter((r) => r.st.class_no === cn); return { cn, n: xs.length, students: d.students.filter((x) => x.class_no === cn).length, rate: avg(xs.map((r) => r.rate)) }; });
+  // 세트별
+  const bySet = sets.map((c) => { const xs = subs.filter((r) => r.concept === c.id); return { c, n: xs.length, rate: avg(xs.map((r) => r.rate)) }; }).filter((x) => x.n);
+  // 문항별 (제출 3건 이상만)
+  const items = [];
+  for (const c of sets) {
+    const xs = subs.filter((r) => r.concept === c.id); if (xs.length < 3) continue;
+    c.questions.forEach((q, i) => {
+      if (q.a == null) return;
+      const ok = xs.filter((r) => r.marks[i]).length, wrongs = {};
+      xs.forEach((r) => { if (!r.marks[i]) { const t = normAns(answerToText(q, r.answers[i])) || '(빈칸)'; wrongs[t] = (wrongs[t] || 0) + 1; } });
+      items.push({ c, i, q, n: xs.length, rate: ok / xs.length, wrongs: Object.entries(wrongs).sort((a, b) => b[1] - a[1]).slice(0, 3) });
+    });
+  }
+  const hard = items.sort((a, b) => a.rate - b.rate).slice(0, 10);
+  // 도움이 필요한 학생: 푼 세트 평균 60% 미만
+  const byStu = d.students.map((st) => { const xs = subs.filter((r) => r.student_id === st.id); return { st, n: xs.length, rate: avg(xs.map((r) => r.rate)), low: xs.filter((r) => r.rate < 0.6).map((r) => r.c) }; }).filter((x) => x.n);
+  const need = byStu.filter((x) => x.rate < 0.6).sort((a, b) => a.rate - b.rate);
+  const notYet = d.students.filter((st) => !subs.some((r) => r.student_id === st.id));
+  el.innerHTML = `
+  <div class="stats" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat"><b>${pct(avg(subs.map((r) => r.rate)))}%</b><span>평균 정답률</span></div>
+    <div class="stat"><b>${subs.length}</b><span>제출 (${subStudents}/${d.students.length}명)</span></div>
+    <div class="stat ${wait ? 'warn' : ''}"><b>${wait}</b><span>채점 대기</span></div>
+    <div class="stat ${unpub ? 'warn' : ''}"><b>${unpub}</b><span>피드백 미공개</span></div>
+    <div class="stat"><b>${need.length}</b><span>도움 필요 (60% 미만)</span></div>
+  </div>
+  <div class="dash2">
+    ${AN.cls === 0 ? `<section class="panel"><h3>반별 평균 정답률</h3>${byClass.map((x) => `<div class="hrow"><span class="hl">${x.cn}반</span>${barHTML(x.rate, x.n ? pct(x.rate) + '%' : '-', `${x.cn}반 · 제출 ${x.n}건 · 학생 ${x.students}명`)}<span class="hn">${x.n}건</span></div>`).join('')}</section>` : ''}
+    <section class="panel" ${AN.cls === 0 ? '' : 'style="grid-column:1/-1"'}><h3>${AN.kind === 'concept' ? '개념별' : '시험별'} 평균 정답률</h3>${bySet.map((x) => `<div class="hrow"><span class="hl" title="${esc(setTitle(x.c))}">${esc(x.c.kind === 'concept' ? `개념 ${x.c.id}` : qLabel(x.c))}</span>${barHTML(x.rate, pct(x.rate) + '%', `${setTitle(x.c)} · 제출 ${x.n}건`)}<span class="hn">${x.n}건</span></div>`).join('')}</section>
+  </div>
+  <section class="panel"><h3>😓 어려웠던 문항 Top ${hard.length}</h3>
+    <table class="plain an-t"><tr><th>세트·번호</th><th>문제</th><th>정답</th><th style="width:22%">정답률</th><th>자주 나온 오답</th></tr>
+    ${hard.map((h) => `<tr><td><b>${esc(h.c.kind === 'concept' ? `개념 ${h.c.id}` : qLabel(h.c))}</b> ${h.i + 1}번</td><td class="small">${optLabel(h.q.q)}</td><td>${optLabel(h.q.answerText)}</td><td>${barHTML(h.rate, pct(h.rate) + '%', `${h.n}명 중 ${Math.round(h.rate * h.n)}명 정답`)}</td>
+      <td class="small">${h.wrongs.map(([t, n]) => `<span class="wa">${optLabel(t)} <b>${n}</b></span>`).join(' ') || '-'}</td></tr>`).join('')}</table>
+    <p class="small muted">제출 3건 이상인 세트만 계산해요. 막대에 마우스를 올리면 인원이 보여요.</p></section>
+  <div class="dash2">
+    <section class="panel"><h3>🙋 도움이 필요한 학생 <span class="muted small">(평균 60% 미만)</span></h3>
+      ${need.length ? `<table class="plain an-t"><tr><th>학생</th><th style="width:34%">평균</th><th>낮은 세트</th></tr>${need.slice(0, 15).map((x) => `<tr><td style="white-space:nowrap">${x.st.class_no}-${x.st.number} <b>${esc(x.st.name)}</b></td><td>${barHTML(x.rate, pct(x.rate) + '%', `${x.n}개 세트 평균`)}</td><td class="small">${x.low.map((c) => esc(c.kind === 'concept' ? `개념 ${c.id}` : qLabel(c))).join(', ')}</td></tr>`).join('')}</table>${need.length > 15 ? `<p class="small muted">외 ${need.length - 15}명</p>` : ''}` : '<div class="notice ok">모두 60% 이상이에요 👏</div>'}</section>
+    <section class="panel"><h3>📭 아직 하나도 안 낸 학생 <span class="muted small">(${notYet.length}명)</span></h3>
+      ${notYet.length ? `<div class="names">${notYet.map((st) => `<span class="nm">${st.class_no}-${st.number} ${esc(st.name)}</span>`).join('')}</div>` : '<div class="notice ok">모두 한 번 이상 냈어요.</div>'}</section>
+  </div>`;
 }
 function go(v) {
   VIEW = v; clearInterval(timer); document.onkeydown = null;
