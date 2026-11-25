@@ -88,6 +88,7 @@ async function drawGrades(quiet) {
   const hby = {}; (d.history || []).forEach((h) => (hby[h.student_id + ':' + h.concept] = hby[h.student_id + ':' + h.concept] || []).push(h));
   const histTip = (sid, cid) => (hby[sid + ':' + cid] || []).map((h) => `${h.attempt}차 ${h.score}점`).join(', ');
   const waiting = d.submissions.filter((s) => s.status !== 'graded').length;
+  const drafts = d.submissions.filter((s) => s.draft && s.status === 'graded').length;   // 확정됐지만 피드백 초안이 아직 안 보이는 것
   // AI 채점 대상: 채점 대기 중, AI 아직 안 함, 10점 만점이 아닌 것
   const totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
   if (!d.students.length) { gx.innerHTML = `<div class="notice">${GRADE}학년 ${CLS}반 명렬표가 없어요. <b>명렬표</b> 탭에서 파일을 올려 주세요.</div>`; return; }
@@ -118,7 +119,7 @@ async function drawGrades(quiet) {
   <div class="bar actions">
     <button class="btn sm pri" id="confirmAll">✔ 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
     <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length}건 · ${aiItems}문항)</button><span id="aiProg" class="small"></span>
-    <button class="btn sm" id="reissue">🔁 재출제</button>
+    <button class="btn sm" id="reissue">🔁 재출제</button>${drafts ? `<button class="btn sm" id="pubDraft" title="확정된 결과에 AI 피드백 초안을 '선생님 말씀'으로 공개해요 (선생님이 쓴 말이 있으면 그대로)">💬 피드백 초안 공개 (${drafts})</button>` : ''}
     ${d.aiEnabled ? '<button class="btn sm ghost" id="aiCheck" title="예시 답 2개로 AI 연결을 확인해요 (저장 안 함)">🔌 AI 연결 확인</button>' : ''}
     <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
     <span style="flex:1"></span>
@@ -152,6 +153,10 @@ async function drawGrades(quiet) {
   $('#csv').onclick = () => downloadCSV(d, by);
   $('#bulkPrint').onclick = () => openPrintPanel(ids);
   $('#reissue').onclick = () => openReissue(ids, d, by);
+  if ($('#pubDraft')) $('#pubDraft').onclick = async () => {
+    if (!confirm(`${GRADE}학년 ${CLS}반의 확정된 결과 ${drafts}건에 AI 피드백 초안을 공개할까요?\n학생 결과 화면에 '선생님 말씀'으로 보여요. 공개 전에 칸을 눌러 초안을 고칠 수도 있어요.`)) return;
+    const r = await T('/api/t/publish-drafts', { grade: GRADE, class: CLS }); toast(`피드백 ${r.count}건을 공개했어요`); drawGrades();
+  };
   $('#aiAll').onclick = async () => {
     if (!aiTodo.length) return toast('AI로 채점할 답이 없어요');
     if (!confirm(`AI로 ${aiTodo.length}건(${aiItems}문항)을 확인할까요?\n철자 1~2자 차이·띄어쓰기·말 덧붙임·칸 위치처럼 판별이 애매한 오답만 AI에게 보내요.\nAI가 인정한 답은 O로 '제안'만 하고, 선생님이 확정해야 학생에게 공개돼요.`)) return;

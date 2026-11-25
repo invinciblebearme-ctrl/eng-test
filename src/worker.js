@@ -220,7 +220,7 @@ export default {
           let subs = [], hist = [];
           if (students.length) {
             const ids = students.map((s) => s.id).join(',');
-            subs = await sb(env, `submissions?select=id,student_id,concept,status,answers,auto,overrides,ai,submitted_at,attempt&student_id=in.(${ids})`);
+            subs = await sb(env, `submissions?select=id,student_id,concept,status,answers,auto,overrides,ai,feedback,feedback_draft,submitted_at,attempt&student_id=in.(${ids})`);
             hist = await sb(env, `submission_history?select=student_id,concept,attempt,auto,overrides,status,graded_at&student_id=in.(${ids})&order=attempt.asc`);
           }
           return json({ students, submissions: subs.map((s) => ({ id: s.id, student_id: s.student_id, concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt || 1, ai: !!s.ai, draft: !!s.feedback_draft && !s.feedback, aiNeed: s.status !== 'graded' && !s.ai && conceptOf(s.concept) ? aiTargets(conceptOf(s.concept), s.answers, marksOf(s)).length : 0, score: marksOf(s).filter(Boolean).length })),
@@ -294,6 +294,16 @@ export default {
           // 피드백 초안도 함께 공개 (선생님이 쓴 말이 없는 것만)
           if (!body.undo && body.useDraft) for (const s of rows) if (s.feedback_draft && !s.feedback) await sb(env, `submissions?id=eq.${s.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { feedback: s.feedback_draft.slice(0, 500) } });
           return json({ count: rows.length, byConcept, byClass, drafts: rows.filter((s) => s.feedback_draft && !s.feedback).length });
+        }
+        // 확정된 결과의 💬 피드백 초안을 학생에게 공개 (선생님이 쓴 말이 없는 것만)
+        if (p === '/api/t/publish-drafts' && req.method === 'POST') {
+          const g = int(body.grade) || 4, c = int(body.class);
+          const students = await sb(env, `students?select=id&grade=eq.${g}${c ? `&class_no=eq.${c}` : ''}`);
+          if (!students.length) return json({ count: 0 });
+          const rows = await sb(env, `submissions?select=id,feedback_draft&status=eq.graded&feedback=is.null&feedback_draft=not.is.null&student_id=in.(${students.map((s) => s.id).join(',')})`);
+          if (body.dry) return json({ count: rows.length });
+          for (const s of rows) await sb(env, `submissions?id=eq.${s.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { feedback: s.feedback_draft.slice(0, 500) } });
+          return json({ count: rows.length });
         }
         // Claude 예약 작업이 남긴 분석 보고서
         if (p === '/api/t/reports') return json({ reports: await sb(env, `ai_reports?select=*&grade=eq.${int(q.get('grade')) || 4}&order=created_at.desc&limit=20`) });

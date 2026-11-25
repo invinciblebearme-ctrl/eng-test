@@ -27,7 +27,7 @@ t(16,5,['hat'],false); t(9,2,'grey',true); t(13,10,'watching TV',true); t(1,1,''
 t(17,1,'수학',true); t(17,1,' 수 학 ',true); t(22,3,'태양',true); t(20,4,'잠자리',true); t(20,4,'침대,잠자리',true); t(20,4,'침대',true);
 t(17,6,'saturday',false); t(17,6,'Saturday',true); t(17,10,'friday',false); t(2,3,'friday',false);
 t(1,1,'wednesday',false); t(1,1,'Wednesday',true); t(13,10,'watching tv',false); t(13,10,'Watching TV',true); t(13,10,'watching TV',true);
-t(8,3,'is',true); t(8,10,'thank',true); t(9,4,['my','is'],true); t(8,5,['yes','is'],true); t(17,7,'Piano',true); t(17,12,['O','a'],true); t(17,12,['o','e'],false);
+t(2,5,"It's Friday.",true); t(2,5,'Friday',true); t(2,5,"It's friday.",false); t(8,3,'is',true); t(8,10,'thank',true); t(9,4,['my','is'],true); t(8,5,['yes','is'],true); t(17,7,'Piano',true); t(17,12,['O','a'],true); t(17,12,['o','e'],false);
 t(18,18,'comicbook'.split(''),true); t(21,18,'watchTV'.split(''),true); t(21,18,'watchVT'.split(''),false); t(17,18,'Tuesday'.split(''),true);
 t(17,22,'날, 요일',true); t(19,25,'분홍색',true); t(18,9,'one thousand',true);
 t(24,1,['brother','오빠'],true); t(24,1,['brother',''],false); t(24,1,['bother','남자 형제'],false); t(24,2,['for','~를 위해'],true); t(24,2,['for','를위해'],true);

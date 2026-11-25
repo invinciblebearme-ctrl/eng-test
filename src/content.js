@@ -62,7 +62,7 @@ const BASE_CONCEPTS = [
       { t: 'text', q: 'Wednesday의 줄임말을 쓰세요. (점은 빼고 써도 돼요)', a: ['Wed', 'Wed.'], cs: true },
       { t: 'text', q: '바르게 고쳐 쓰세요.  friday', a: 'Friday', cs: true },
       { t: 'choice', q: 'Thu.는 무슨 요일인가요?', opts: ['화요일', '수요일', '목요일', '토요일'], a: '목요일' },
-      { t: 'text', q: '문장에서 틀린 낱말을 바르게 고쳐 쓰세요.  It’s friday.', a: 'Friday', cs: true },
+      { t: 'text', q: '문장에서 틀린 낱말을 바르게 고쳐 쓰세요.  It’s friday.', a: ['Friday', 'It’s Friday', 'It is Friday'], cs: true },   // 문장 전체를 바르게 써도 정답
       { t: 'text', q: 'Monday의 줄임말을 쓰세요. (점은 빼고 써도 돼요)', a: ['Mon', 'Mon.'], cs: true },
       { t: 'text', q: 'Tuesday의 줄임말을 쓰세요. (점은 빼고 써도 돼요)', a: ['Tue', 'Tue.'], cs: true },
       { t: 'text', q: 'Wed.는 어떤 요일의 줄임말인지 영어로 쓰세요.', a: 'Wednesday', cs: true },
