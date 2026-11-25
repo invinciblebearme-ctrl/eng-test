@@ -19,7 +19,7 @@ http.createServer(async (req, res) => {
 // 가짜 AI (OpenAI 호환) :8789 — "It's"를 덧붙인 답은 인정, 나머지는 오답
 let lastAI = null;
 http.createServer(async (req, res) => {
-  let b = ''; for await (const c of req) b += c; const j = JSON.parse(b); lastAI = { auth: req.headers.authorization, model: j.model };
+  let b = ''; for await (const c of req) b += c; const j = JSON.parse(b); lastAI = { auth: req.headers.authorization, model: j.model }; if (process.env.AI_LOG) fs.appendFileSync(process.env.AI_LOG, JSON.stringify({ chars: j.messages.map((m) => m.content.length), max_tokens: j.max_tokens, user: j.messages[1].content }) + '\n');
   const items = [...j.messages[1].content.matchAll(/### (\d+)번[\s\S]*?\[학생 답\] (.*)/g)];
   const results = items.map(([, n, a]) => ({ n: +n, ok: /^it'?s /i.test(a), reason: /^it'?s /i.test(a) ? "It's를 덧붙였지만 시각 표현이 맞아요" : '철자가 틀렸어요' }));
   res.writeHead(200, { 'content-type': 'application/json' });

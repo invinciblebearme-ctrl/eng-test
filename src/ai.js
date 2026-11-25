@@ -9,33 +9,30 @@
 //
 // API 형식이 OpenAI 호환이 아니면 callAI()의 요청 본문과 응답 읽는 부분만 바꾸면 됩니다.
 import { answerText } from './content.js';
+import { aiTargets } from './triage.js';
 
-const SYSTEM = `너는 초등학교 4학년 영어 확인 문제를 채점하는 선생님의 보조자야.
-각 문항의 [문제], [정답], [학생 답]을 보고, 학생 답을 정답으로 인정할 수 있는지 판단해.
-기준:
-- 철자가 틀리면 오답 (예: yelow, Wensday). 이 학습의 핵심이 철자이기 때문이야.
-- 띄어쓰기 한 칸 차이, 끝 마침표·물음표 유무, 따옴표 모양(’ ')은 무시해.
-- [대소문자 구별: 예]인 문항은 대문자를 틀리면 오답. 아니면 대소문자는 무시해.
-- 정답과 뜻과 표현이 같고 문제가 요구한 형태를 지켰으면 정답 (예: "It's four thirty"처럼 문제에 이미 있는 말을 덧붙인 것, grey/gray).
-- 한국어 뜻을 쓰는 문항은 뜻이 같으면 정답.
-- '철자 / 뜻'을 함께 쓰는 문항은 영어 철자와 우리말 뜻이 둘 다 맞아야 정답. 철자는 엄격하게, 뜻은 의미가 같으면 인정.
-- 확실하지 않으면 오답으로 하고 이유에 "선생님 확인 필요"라고 써.
-반드시 JSON만 출력해: {"results":[{"n":문항번호,"ok":true 또는 false,"reason":"한국어 한 문장"}]}`;
+// 지시문은 짧게 (매 요청마다 보내므로 토큰 절약)
+const SYSTEM = `초등 영어 시험 채점 보조. 각 문항의 학생 답이 자동 채점에서 오답이 됐지만 정답과 아주 가까워 애매한 경우다. 인정 여부만 판단해.
+- 영어 철자가 틀리면 오답(철자가 학습 목표). 띄어쓰기·끝 문장부호·따옴표 모양 차이는 무시.
+- [대소문자 구별: 예]면 대소문자 틀림은 오답.
+- 문제에 이미 있는 말을 덧붙였거나(It's four thirty) 같은 뜻의 우리말이면 정답. 칸을 잘못 맞춘 것은 의도가 분명하면 정답.
+- '철자/뜻' 문항은 둘 다 맞아야 정답. 확실하지 않으면 오답, 이유에 "선생님 확인".
+JSON만: {"results":[{"n":번호,"ok":true|false,"reason":"20자 이내"}]}`;
 
 function describe(q, ans) {
   const show = Array.isArray(ans) ? (q.t === 'spellmean' ? `철자: ${ans[0] || ''} / 뜻: ${ans[1] || ''}` : q.t === 'order' ? ans.join(q.join ?? ' ') : q.t === 'spell' ? `${q.pat} 빈칸에 ${ans.join(', ')}` : ans.join(' / ')) : String(ans ?? '');
   const extra = [q.say && `(듣기 음성: "${q.say}")`, q.clock && `(시계: ${q.clock[0]}시 ${q.clock[1]}분)`, q.color && `(색 견본 ${q.color})`,
     q.money && `(그림: ${q.money.c100 ? '100원 동전 ' + q.money.c100 + '개' : ''}${q.money.b1000 ? '1000원 지폐 ' + q.money.b1000 + '장' : ''})`].filter(Boolean).join(' ');
-  return `[문제] ${q.q} ${extra}\n[정답] ${answerText(q)}${Array.isArray(q.a) && q.t === 'text' && q.a.length > 1 ? ` (허용: ${q.a.join(', ')})` : ''}\n[대소문자 구별] ${q.cs ? '예' : '아니오'}\n[학생 답] ${show}`;
+  return `[문제] ${q.q.slice(0, 120)} ${extra}\n[정답] ${answerText(q)}${Array.isArray(q.a) && q.t === 'text' && q.a.length > 1 ? ` (허용: ${q.a.join(', ')})` : ''}\n[대소문자 구별] ${q.cs ? '예' : '아니오'}\n[학생 답] ${show}`;
 }
 
-async function callAI(env, userText) {
+async function callAI(env, userText, maxTokens = 400) {
   const headers = { 'content-type': 'application/json' };
   const h = env.AI_AUTH_HEADER || 'authorization';
   headers[h] = h.toLowerCase() === 'authorization' ? 'Bearer ' + env.AI_API_KEY : env.AI_API_KEY;
   const r = await fetch(env.AI_API_URL, {
     method: 'POST', headers,
-    body: JSON.stringify({ model: env.AI_MODEL, temperature: 0, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: userText }] }),
+    body: JSON.stringify({ model: env.AI_MODEL, temperature: 0, max_tokens: maxTokens, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: userText }] }),
   });
   const t = await r.text();
   if (!r.ok) throw Object.assign(new Error(`AI API 오류 ${r.status}: ${t.slice(0, 200)}`), { status: 502 });
@@ -52,25 +49,17 @@ function parseResults(text) {
   return Array.isArray(j) ? j : j.results || [];
 }
 
-// 제출 하나를 AI로 채점 → { "문항index": {ok, reason} }
-export async function aiGrade(env, concept, answers, auto) {
-  const targets = concept.questions.map((q, i) => ({ q, i })).filter(({ i }) => !auto[i]);
+// 제출 하나를 AI로 채점 → { "문항index": {ok, reason, why} }
+// marks: 지금 O/X (선생님이 고친 것 포함). 애매한 오답(triage.js)만 AI에게 보내고, 없으면 AI를 부르지 않음.
+export async function aiGrade(env, concept, answers, marks) {
+  const targets = aiTargets(concept, answers, marks);
   const out = {};
-  const ask = [];
-  for (const { q, i } of targets) {
-    const a = answers[i];
-    const empty = a == null || (Array.isArray(a) ? a.every((x) => !String(x).trim()) : !String(a).trim());
-    // 빈칸, 고르기 문항(choice/pick)은 AI가 판단할 것이 없음
-    if (empty || q.t === 'choice' || q.t === 'pick' || q.t === 'spell') out[i] = { ok: false, reason: empty ? '답을 쓰지 않았어요' : '보기를 잘못 골랐어요' };
-    else ask.push({ q, i });
-  }
-  if (ask.length) {
-    const user = `개념 ${concept.id}: ${concept.title}\n\n` + ask.map(({ q, i }) => `### ${i + 1}번\n${describe(q, answers[i])}`).join('\n\n');
-    const res = parseResults(await callAI(env, user));
-    for (const { i } of ask) {
-      const r = res.find((x) => +x.n === i + 1);
-      out[i] = r ? { ok: !!r.ok, reason: String(r.reason || '').slice(0, 200) } : { ok: false, reason: 'AI가 답하지 않음 — 선생님 확인 필요' };
-    }
+  if (!targets.length) return out;
+  const user = `${concept.title}\n\n` + targets.map(({ i, why }) => `### ${i + 1}번 (애매한 이유: ${why})\n${describe(concept.questions[i], answers[i])}`).join('\n\n');
+  const res = parseResults(await callAI(env, user, 120 + 50 * targets.length));
+  for (const { i, why } of targets) {
+    const r = res.find((x) => +x.n === i + 1);
+    out[i] = r ? { ok: !!r.ok, reason: String(r.reason || '').slice(0, 120), why } : { ok: false, reason: 'AI가 답하지 않음 — 선생님 확인', why };
   }
   return out;
 }

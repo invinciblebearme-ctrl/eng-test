@@ -42,6 +42,8 @@ node test/serve.mjs       # 가짜 Supabase·R2로 로컬 실행 (http://127.0.0
 | `TEACHER_PASSWORD` | Secret | 교사 비밀번호 |
 | `AI_API_URL` · `AI_MODEL` · `AI_API_KEY` | Text·Text·Secret | (선택) AI 채점 — OpenAI 호환 형식 |
 
+AI 채점은 토큰을 아끼려고 **판별이 애매한 오답만** 보냄 (`src/triage.js`): 철자 1~2자 차이, 띄어쓰기·문장부호 차이, 말을 덧붙이거나 빠뜨림, 칸 위치 잘못. 빈칸·고르기 문항·전혀 다른 답·대소문자만 틀린 답(대소문자 구별 문항)은 보내지 않고, 보낼 문항이 없으면 AI를 부르지 않음. 규칙 확인: `node test/triage.test.mjs`
+
 ## 새 단원평가 추가
 1. 문제지 `.hwp`, 문항별 음원 `.zip`, 정답 및 대본 `.hwp`를 받음
 2. 그림·음원을 교사 전용 업로드 API(`POST /api/t/media?key=...`)로 R2에 올림

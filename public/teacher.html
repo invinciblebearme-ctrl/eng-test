@@ -77,13 +77,15 @@ async function drawGrades(quiet) {
   const waiting = d.submissions.filter((s) => s.status !== 'graded').length;
   // AI 채점 대상: 채점 대기 중, AI 아직 안 함, 10점 만점이 아닌 것
   const totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
-  const aiTodo = d.submissions.filter((s) => s.status !== 'graded' && !s.ai && s.score < totalOf(s.concept));
   if (!d.students.length) { gx.innerHTML = `<div class="notice">${GRADE}학년 ${CLS}반 명렬표가 없어요. <b>명렬표</b> 탭에서 파일을 올려 주세요.</div>`; return; }
   const hasConcepts = KG().some((c) => c.kind === 'concept'); const grp = hasConcepts ? GROUP : 'unit';
   // 단원 평가는 단원별로 골라 보기
   const units = [...new Map(KG().filter((c) => c.kind !== 'concept').map((c) => [c.ukey, c.unit])).entries()];
   const uf = grp === 'unit' && units.some(([k]) => k === UNITF) ? UNITF : 'all';
   const ids = KG().filter((c) => (grp === 'unit' ? c.kind !== 'concept' && (uf === 'all' || c.ukey === uf) : c.kind === 'concept')).map((c) => c.id);
+  // AI 채점 대상: 채점 대기 중이고, 판별이 애매한 오답(철자 1~2자, 칸 위치 등)이 있는 제출만
+  const aiTodo = d.submissions.filter((s) => s.aiNeed > 0 && ids.includes(s.concept));
+  const aiItems = aiTodo.reduce((a, s) => a + s.aiNeed, 0);
   const avg = ids.map((cid) => { const xs = d.students.map((s) => by[s.id + ':' + cid]).filter(Boolean); return xs.length ? (xs.reduce((a, b) => a + b.score, 0) / xs.length).toFixed(1) : '-'; });
   const cnt = ids.map((cid) => d.students.filter((s) => by[s.id + ':' + cid]).length);
   const subsIn = d.submissions.filter((x) => ids.includes(x.concept));
@@ -102,7 +104,7 @@ async function drawGrades(quiet) {
   </div>
   <div class="bar actions">
     <button class="btn sm pri" id="confirmAll">✔ 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
-    <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length})</button><span id="aiProg" class="small"></span>
+    <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length}건 · ${aiItems}문항)</button><span id="aiProg" class="small"></span>
     <button class="btn sm" id="reissue">🔁 재출제</button>
     <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
     <span style="flex:1"></span>
@@ -130,7 +132,7 @@ async function drawGrades(quiet) {
   $('#reissue').onclick = () => openReissue(ids, d, by);
   $('#aiAll').onclick = async () => {
     if (!aiTodo.length) return toast('AI로 채점할 답이 없어요');
-    if (!confirm(`채점 대기 중인 ${aiTodo.length}건을 AI로 채점할까요?\n자동 채점에서 X가 나온 답만 AI에게 보내고, AI가 인정한 답은 O로 '제안'만 해요.\n학생에게는 선생님이 확정해야 공개돼요.`)) return;
+    if (!confirm(`AI로 ${aiTodo.length}건(${aiItems}문항)을 확인할까요?\n철자 1~2자 차이·띄어쓰기·말 덧붙임·칸 위치처럼 판별이 애매한 오답만 AI에게 보내요.\nAI가 인정한 답은 O로 '제안'만 하고, 선생님이 확정해야 학생에게 공개돼요.`)) return;
     $('#aiAll').disabled = true; let ok = 0, bad = 0;
     for (const [k, x] of aiTodo.entries()) {
       $('#aiProg').textContent = ` 🤖 ${k + 1}/${aiTodo.length} 채점 중…`;
@@ -168,7 +170,7 @@ async function openSub(id) {
       ${c.questions.map((q, i) => `<div class="gr"><div><b>${i + 1}</b></div><div class="small">${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(🔊 ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}</div>
         <div class="stu">${optLabel(answerToText(q, s.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
         <div><div class="ox"><button class="o ${marks[i] ? 'on' : ''}" data-i="${i}" data-v="1">O</button><button class="x ${!marks[i] ? 'on' : ''}" data-i="${i}" data-v="0">X</button></div>
-        <div class="auto">자동: ${s.auto[i] ? 'O' : 'X'}${marks[i] !== s.auto[i] ? ' → 수정함' : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}</div>` : ''}`).join('')}
+        <div class="auto">자동: ${s.auto[i] ? 'O' : 'X'}${marks[i] !== s.auto[i] ? ' → 수정함' : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}${s.ai[i].why ? ` <span class="muted">(${esc(s.ai[i].why)})</span>` : ''}</div>` : ''}`).join('')}
       <h3>점수: ${score} / ${c.questions.length}${(s.attempt || 1) > 1 ? ` <span class="badge">${s.attempt}차</span>` : ''}</h3>
       ${(d.history || []).length ? `<details class="help" open><summary>📚 이전 기록 ${d.history.length}개</summary><table class="plain small" style="margin-top:6px"><tr><th>차수</th><th>점수</th><th>문항별 (O/X)</th><th>채점일</th></tr>${d.history.map((h) => `<tr><td>${h.attempt}차</td><td><b>${h.score}</b> / ${c.questions.length}</td><td style="font-family:monospace">${h.marks.map((mk, i) => `<span style="color:${mk ? 'var(--ok)' : 'var(--no)'}" title="${i + 1}번">${mk ? 'O' : 'X'}</span>`).join('')}</td><td>${fmtDate(h.graded_at) || '채점 전'}</td></tr>`).join('')}</table></details>` : ''}
       <label class="small muted">학생에게 남길 말 (선택)</label><textarea id="fbk" placeholder="예: 요일 첫 글자는 대문자로 써요!">${esc(s.feedback || '')}</textarea>

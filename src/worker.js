@@ -1,5 +1,6 @@
 import { CONCEPTS, UNITS, gradeOne, answerText, publicConcepts } from './content.js';
 import { aiGrade } from './ai.js';
+import { aiTargets } from './triage.js';
 import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS } from './assets.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -206,10 +207,10 @@ export default {
           let subs = [], hist = [];
           if (students.length) {
             const ids = students.map((s) => s.id).join(',');
-            subs = await sb(env, `submissions?select=id,student_id,concept,status,auto,overrides,ai,submitted_at,attempt&student_id=in.(${ids})`);
+            subs = await sb(env, `submissions?select=id,student_id,concept,status,answers,auto,overrides,ai,submitted_at,attempt&student_id=in.(${ids})`);
             hist = await sb(env, `submission_history?select=student_id,concept,attempt,auto,overrides,status,graded_at&student_id=in.(${ids})&order=attempt.asc`);
           }
-          return json({ students, submissions: subs.map((s) => ({ id: s.id, student_id: s.student_id, concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt || 1, ai: !!s.ai, score: marksOf(s).filter(Boolean).length })),
+          return json({ students, submissions: subs.map((s) => ({ id: s.id, student_id: s.student_id, concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt || 1, ai: !!s.ai, aiNeed: s.status !== 'graded' && !s.ai && conceptOf(s.concept) ? aiTargets(conceptOf(s.concept), s.answers, marksOf(s)).length : 0, score: marksOf(s).filter(Boolean).length })),
             history: hist.map((h) => ({ student_id: h.student_id, concept: h.concept, attempt: h.attempt, status: h.status, graded_at: h.graded_at, score: marksOf(h).filter(Boolean).length })), aiEnabled: aiOn(env) });
         }
         // 일괄 출력용: 한 반의 학생과 제출 답(자세히)
@@ -235,12 +236,12 @@ export default {
           const r = await sb(env, `submissions?select=*&id=eq.${int(body.id)}`);
           if (!r.length) return fail('제출을 찾을 수 없어요', 404);
           const s = r[0], c = conceptOf(s.concept);
-          const ai = await aiGrade(env, c, s.answers, s.auto);
+          const ai = await aiGrade(env, c, s.answers, marksOf(s));
           // AI가 인정한 답만 O로 제안 (선생님이 이미 직접 고친 문항은 그대로 둠)
           const overrides = { ...(s.overrides || {}) };
           for (const [i, v] of Object.entries(ai)) if (overrides[i] == null && v.ok) overrides[i] = true;
           await sb(env, `submissions?id=eq.${s.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { ai, overrides } });
-          return json({ ok: true, ai, overrides, score: marksOf({ ...s, overrides }).filter(Boolean).length });
+          return json({ ok: true, ai, overrides, asked: Object.keys(ai).length, score: marksOf({ ...s, overrides }).filter(Boolean).length });
         }
         if (p === '/api/t/grade' && req.method === 'POST') {
           const id = int(body.id);
