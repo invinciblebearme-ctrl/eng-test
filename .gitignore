@@ -7,3 +7,4 @@ test/*-e2e.cjs
 test/media/
 test/e2e.cjs
 test/roster.cjs
+test/manual-shots.cjs
