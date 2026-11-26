@@ -2,6 +2,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 async function api(path, body, token) {
+  if (token) LAST_TOKEN = token;
   const opt = { method: body ? 'POST' : 'GET', headers: {} };
   if (body) { opt.headers['content-type'] = 'application/json'; opt.body = JSON.stringify(body); }
   if (token) opt.headers.authorization = 'Bearer ' + token;
@@ -9,6 +10,27 @@ async function api(path, body, token) {
   let d = null; try { d = await r.json(); } catch {}
   if (!r.ok) { const e = new Error((d && d.error) || ('오류 ' + r.status)); e.status = r.status; e.data = d || {}; throw e; }
   return d;
+}
+
+// ---------- 화면 오류를 서버에 알리기 (로그인한 뒤에만, 한 페이지에 5건까지) ----------
+// API 오류(서버가 이미 기록)와 확장 프로그램 오류는 빼고, 이 사이트 스크립트의 오류만
+let LAST_TOKEN = '';
+const CLIENT_ERR_SENT = { n: 0, keys: new Set() };
+function reportClientError(message, where) {
+  try {
+    const msg = String(message || '').slice(0, 300), key = msg.slice(0, 80) + '|' + where;
+    if (!LAST_TOKEN || !msg || CLIENT_ERR_SENT.n >= 5 || CLIENT_ERR_SENT.keys.has(key)) return;
+    CLIENT_ERR_SENT.n++; CLIENT_ERR_SENT.keys.add(key);
+    fetch('/api/client-error', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + LAST_TOKEN }, body: JSON.stringify({ message: msg, where: String(where || '').slice(0, 120) }) }).catch(() => {});
+  } catch {}
+}
+if (typeof addEventListener === 'function') {
+  addEventListener('error', (e) => {
+    const f = String(e.filename || '');
+    if (f && typeof location !== 'undefined' && !f.startsWith(location.origin)) return;   // 다른 사이트·확장 프로그램
+    reportClientError(e.message, `${location.pathname} ${f.split('/').pop()}:${e.lineno || 0}`);
+  });
+  addEventListener('unhandledrejection', (e) => { const r = e.reason; if (r && r.status) return; reportClientError((r && r.message) || r, location.pathname + ' (promise)'); });
 }
 
 // ---------- 알림·상태 (화면 읽기 프로그램도 읽어 줌) ----------

@@ -10,6 +10,7 @@ const COLS = {
   submission_history: ['id', 'student_id', 'concept', 'attempt', 'answers', 'auto', 'overrides', 'ai', 'feedback_draft', 'status', 'feedback', 'submitted_at', 'graded_at', 'archived_at'],
   ai_reports: ['id', 'grade', 'title', 'body', 'created_at'],
   test_settings: ['concept', 'enabled', 'updated_at'],
+  error_log: ['id', 'at', 'source', 'method', 'path', 'status', 'message', 'detail'],
 };
 const V2_ONLY = { students: ['archived_at'], submissions: ['rev'] };
 const DEFAULTS = {
@@ -18,14 +19,16 @@ const DEFAULTS = {
   submission_history: () => ({ overrides: {}, archived_at: new Date().toISOString() }),
   ai_reports: () => ({ created_at: new Date().toISOString() }),
   test_settings: () => ({ enabled: true, updated_at: new Date().toISOString() }),
+  error_log: () => ({ at: new Date().toISOString(), source: 'server', detail: null }),
 };
 const UNIQUE = { students: ['grade', 'class_no', 'number'], submissions: ['student_id', 'concept'], test_settings: ['concept'] };
 
 class PgErr extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
 
-export function createDb({ schema = 2, maxRows = 1000 } = {}) {
-  const db = { students: [], submissions: [], test_settings: [], submission_history: [], ai_reports: [] };
-  const state = { db, seq: 1, schema, maxRows, log: [] };
+// errorLog: false면 error_log 표가 없는 DB 흉내. state.fail(method, path) → true면 그 요청을 500으로 (DB 장애 흉내)
+export function createDb({ schema = 2, maxRows = 1000, errorLog = true } = {}) {
+  const db = { students: [], submissions: [], test_settings: [], submission_history: [], ai_reports: [], ...(errorLog ? { error_log: [] } : {}) };
+  const state = { db, seq: 1, schema, maxRows, log: [], fail: null };
   const cols = (t) => COLS[t].filter((c) => state.schema >= 2 || !(V2_ONLY[t] || []).includes(c));
   const checkCol = (t, c) => { if (!cols(t).includes(c)) throw new PgErr(400, '42703', `column ${t}.${c} does not exist`); };
   const insertRow = (t, row) => {
@@ -99,6 +102,7 @@ export function createDb({ schema = 2, maxRows = 1000 } = {}) {
     const u = new URLSearchParams(search);
     const parts = pathname.replace(/^\/rest\/v1\//, '').split('/');
     state.log.push(method + ' ' + parts.join('/') + (search ? '?' + search : ''));
+    if (state.fail && state.fail(method, parts.join('/'))) return { status: 500, body: { code: 'XX000', message: 'mock database is down' } };
     try {
       if (parts[0] === 'rpc') {
         const fn = RPC[parts[1]];

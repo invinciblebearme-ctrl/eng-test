@@ -37,6 +37,13 @@
 - **🔓 시험 열기·링크**: 시험별 열기/닫기, 링크 복사, QR 카드 출력
 - 모든 창은 `role=dialog`·초점 가두기·Esc·닫으면 초점 되돌림(`common.js` `openModal`/`trapModal`), 알림은 `toast(글, 'ok'|'error')`(role=status), 칸 옆 상태는 `statusMsg`
 
+## ⚠️ 오류 알림
+- 서버 500번대 오류(DB 오류·AI 오류·업그레이드 필요 등)와 교사·학생 화면의 자바스크립트 오류를 Supabase `error_log` 표에 남김 (`sql/upgrade-2026-11b-errors.sql`로 표 추가, 없으면 기록만 건너뜀)
+  - 같은 오류는 1분에 한 번만. 쿼리 문자열·학생 답·토큰은 남기지 않음. 화면 오류는 로그인한 사용자만, 한 페이지에 5건까지. 30일 지난 기록은 자동 삭제
+- 교사 화면 맨 위에 “최근 24시간 새 오류 N건 [자세히] [확인함]” (5분마다 확인, ‘확인함’ 이후 새로 생긴 것만)
+- 선택: Cloudflare 비밀값 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID`를 넣으면 텔레그램으로도 알림 (같은 오류 10분에 한 번)
+- Cloudflare 로그(`wrangler tail`)에도 `eng-error`로 찍힘
+
 ## Claude 예약 작업 (평일 오후)
 Supabase에 직접 연결해서 ① 애매한 오답에 🤖 O/X 제안(`ai`, `overrides`) ② 학생별 💬 피드백 초안(`feedback_draft`) ③ 학년별 분석 보고서(`ai_reports`)를 남긴다. `status`·`feedback`은 건드리지 않으므로 **선생님이 확정해야 학생에게 보인다** (일괄 확정 창의 '피드백 초안도 함께 공개').
 
@@ -70,6 +77,7 @@ Supabase SQL Editor에서 `sql/upgrade-2026-11.sql` 실행 → `select public.en
 | `SUPABASE_SERVICE_KEY` | Secret | Supabase secret 키 |
 | `TEACHER_PASSWORD` | Secret | 교사 비밀번호 |
 | `AI_API_URL` · `AI_MODEL` · `AI_API_KEY` | Secret | AI 채점 — 전북AI API Gateway (OpenAI 호환) `https://api.baze.co/v1/gateway/chat/completions/`, 모델 `gemini-3.5-flash-lite` |
+| `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID` | Secret | (선택) 오류 알림을 텔레그램으로 |
 
 AI 채점은 토큰을 아끼려고 **판별이 애매한 오답만** 보냄 (`src/triage.js`): 철자 1~2자 차이, 띄어쓰기·문장부호 차이, 말을 덧붙이거나 빠뜨림, 칸 위치 잘못. 빈칸·고르기 문항·전혀 다른 답·대소문자만 틀린 답(대소문자 구별 문항)은 보내지 않고, 보낼 문항이 없으면 AI를 부르지 않음. 규칙 확인: `node test/triage.test.mjs`
 

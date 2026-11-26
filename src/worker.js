@@ -139,6 +139,27 @@ async function patchRev(env, id, rev, patch, sel = 'id,rev') {
   return r[0];
 }
 
+// ---------- 오류 기록 (error_log 표 + 선택: 텔레그램) ----------
+// 500번대만. 같은 오류는 1분에 한 번 기록, 텔레그램은 10분에 한 번. 기록이 실패해도 원래 응답에는 영향 없음.
+// 쿼리 문자열·학생 답·토큰은 남기지 않음.
+const ERR_SEEN = new Map(), TG_SEEN = new Map();
+const seenRecently = (m, key, ms) => { const now = Date.now(), t = m.get(key); if (t && now - t < ms) return true; if (m.size > 300) m.clear(); m.set(key, now); return false; };
+async function logError(env, info) {
+  try {
+    const row = { source: info.source || 'server', method: String(info.method || '').slice(0, 10), path: String(info.path || '').slice(0, 120), status: info.status ?? null, message: String(info.message || '').replace(/Bearer\s+\S+/gi, 'Bearer ***').slice(0, 300), detail: info.detail || null };
+    const key = `${env.SUPABASE_URL}|${row.source}|${row.path}|${row.status}|${row.message.slice(0, 80)}`;
+    if (seenRecently(ERR_SEEN, key, 60000)) return;
+    console.error('eng-error', JSON.stringify(row));
+    await sb(env, 'error_log', { method: 'POST', prefer: 'return=minimal', body: [row] }).catch(() => {});
+    if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID && !seenRecently(TG_SEEN, key, 600000)) {
+      const where = row.source === 'server' ? '서버' : row.source === 'teacher' ? '교사 화면' : '학생 화면';
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: `⚠️ eng-test ${where} 오류\n${row.method} ${row.path}${row.status ? ' → ' + row.status : ''}\n${row.message}` }) }).catch(() => {});
+    }
+  } catch {}
+}
+const later = (ctx, p) => (ctx && typeof ctx.waitUntil === 'function' ? ctx.waitUntil(p) : p);
+const CLIENT_ERR = { n: 0, at: 0 };   // 화면 오류 받기: 1분에 30건까지
+
 // ---------- 듣기·그림 파일 (R2) — 로그인한 학생·교사만 ----------
 async function media(req, env, url) {
   const t = url.searchParams.get('t') || '';
@@ -191,7 +212,7 @@ async function answerCounts(env, ids) {
 
 // ---------- 라우터 ----------
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const p = url.pathname;
     try {
@@ -309,6 +330,18 @@ export default {
         return json({ ok: true });
       }
 
+      // 화면(자바스크립트) 오류 받기 — 로그인한 학생·교사만, 짧게. 아니면 조용히 무시
+      if (p === '/api/client-error' && req.method === 'POST') {
+        const now = Date.now(); if (now - CLIENT_ERR.at > 60000) Object.assign(CLIENT_ERR, { n: 0, at: now });
+        if (++CLIENT_ERR.n > 30) return json({ ok: false });
+        let source = null;
+        if (await checkToken(env, req)) source = 'teacher';
+        else if (await studentFrom(env, req).then(() => true).catch(() => false)) source = 'student';
+        if (!source) return json({ ok: false });
+        await later(ctx, logError(env, { source, method: 'JS', path: String(body.where || '').replace(/[?#][^\s]*/g, ''), message: body.message }));
+        return json({ ok: true });
+      }
+
       // ----- 교사 -----
       if (p === '/api/teacher/login' && req.method === 'POST') {
         if (!safeEqual(body.password || '', env.TEACHER_PASSWORD)) return fail('비밀번호가 맞지 않아요', 401);
@@ -318,6 +351,15 @@ export default {
         if (!(await checkToken(env, req))) return fail('다시 로그인해 주세요', 401);
 
         if (p === '/api/t/key') return json({ concepts: CONCEPTS.map((c) => ({ ...c, questions: c.questions.map((qq) => ({ ...qq, answerText: answerText(qq), end: qq.t === 'order' ? (qq.join === '' ? '' : (qq.a.match(/[.?!]$/) || ['.'])[0]) : undefined })) })) });
+        // 최근 오류 (교사 화면 ⚠️ 알림). 표가 없으면 missing. 열 때 30일 지난 기록 정리
+        if (p === '/api/t/errors') {
+          const hours = Math.min(Math.max(int(q.get('hours')) || 24, 1), 24 * 30), since = new Date(Date.now() - hours * 3600e3).toISOString();
+          try {
+            const { data, total } = await sb(env, `error_log?select=id,at,source,method,path,status,message&at=gte.${since}&order=id.desc&limit=50`, { count: true });
+            later(ctx, sb(env, `error_log?at=lt.${new Date(Date.now() - 30 * 86400e3).toISOString()}`, { method: 'DELETE', prefer: 'return=minimal' }).catch(() => {}));
+            return json({ items: data, count: total ?? data.length, hours, telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
+          } catch (e) { if (e.status === 503) return json({ items: [], count: 0, hours, missing: true }); throw e; }
+        }
         if (p === '/api/t/schema') { const v = await schemaV(env, true); return json({ version: v, ok: v >= 2, message: v >= 2 ? '' : UPGRADE_MSG }); }
 
         if (p === '/api/t/overview') {
@@ -637,7 +679,9 @@ export default {
       }
       return fail('없는 주소예요', 404);
     } catch (e) {
-      return fail(e.message || '서버 오류', e.status || 500, e.extra);
+      const status = e.status || 500;
+      if (status >= 500) await later(ctx, logError(env, { method: req.method, path: p, status, message: e.message || String(e), detail: e.extra && e.extra.upgrade ? { upgrade: true } : null }));
+      return fail(status === 500 && !(e instanceof HttpError) ? '서버 오류가 났어요. 잠시 뒤 다시 해 주세요.' : e.message || '서버 오류', status, e.extra);
     }
   },
 };

@@ -15,6 +15,7 @@ await db.exec(`create role anon nologin; create role authenticated nologin; crea
 await db.exec(read('schema.sql'));
 await db.exec(read('sql/upgrade-2026-11.sql'));
 await db.exec(read('sql/upgrade-2026-11.sql'));   // 두 번 실행해도 안전
+await db.exec(read('sql/upgrade-2026-11b-errors.sql'));   // 오류 기록 표 (schema.sql에도 있음 → 다시 실행해도 안전)
 await db.exec(`grant usage on schema public to service_role; grant all on all tables in schema public to service_role; grant all on all sequences in schema public to service_role;`);
 
 ok((await one('select public.eng_schema_version() v'))[0].v === 2, '설치 확인 함수 = 2');
@@ -73,6 +74,13 @@ const upd = await one(`update submissions set feedback = 'b' where concept = 3 a
 ok(upd.length === 0, 'rev 조건: 옛 버전 UPDATE는 0행');
 const pr = await one(`select has_function_privilege('anon', 'public.submissions_bump_rev()', 'execute') x`);
 ok(pr[0].x === false, '트리거 함수도 anon 실행 불가');
+
+// ---- 오류 기록 표 ----
+const rls = await one(`select relrowsecurity r from pg_class where oid = 'public.error_log'::regclass`);
+ok(rls[0].r === true, 'error_log: RLS 켜짐 (정책 없음 → anon 접근 불가)');
+await db.query(`insert into error_log (path, status, message) values ('/api/me', 502, 'x')`);
+let bad1 = false; try { await db.query(`insert into error_log (source) values ('hacker')`); } catch { bad1 = true; }
+ok(bad1, 'error_log: source는 server/teacher/student만');
 
 console.log(bad ? `${bad} problems` : 'ALL OK');
 process.exit(bad ? 1 : 0);

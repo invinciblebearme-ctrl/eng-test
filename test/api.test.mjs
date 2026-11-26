@@ -8,11 +8,12 @@ let bad = 0, n = 0;
 const ok = (cond, msg, extra) => { n++; if (!cond) { bad++; console.log('BAD', msg, extra !== undefined ? JSON.stringify(extra).slice(0, 300) : ''); } else console.log('ok ', msg); };
 
 const env = { SUPABASE_URL: 'http://mock.local', SUPABASE_SERVICE_KEY: 'sb_secret_test', TEACHER_PASSWORD: 'pw-test', AI_API_URL: 'http://ai.local/v1', AI_API_KEY: 'k', AI_MODEL: 'm' };
-let mock;
+let mock; const tgSent = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opt) => {
   const u = String(url);
   if (/^http:\/\/mock\d*\.local/.test(u)) return mock.fetchLike(u, opt);
+  if (u.startsWith('https://api.telegram.org/')) { tgSent.push({ url: u, body: JSON.parse(opt.body) }); return new Response('{"ok":true}'); }
   if (u.startsWith(env.AI_API_URL)) {   // 가짜 AI: "It's"로 시작하면 인정
     const j = JSON.parse(opt.body); const items = [...j.messages[1].content.matchAll(/### (\d+)번[\s\S]*?\[학생 답\] (.*)/g)];
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ results: items.map(([, k, a]) => ({ n: +k, ok: /^it'?s /i.test(a), reason: 'r' })) }) } }] }), { headers: { 'content-type': 'application/json' } });
@@ -176,6 +177,47 @@ ok(c1 && c1.wait === 1 && c1.openSets === open4 && c1.missing === open4 * c1.stu
 await call('/api/t/settings', { concepts: CONCEPTS.filter((c) => c.grade === 4 && c.id !== 1).map((c) => c.id), enabled: false }, tk);
 const c1b = (await call('/api/t/today?grade=4', null, tk)).d.classes.find((c) => c.class_no === 1);
 ok(c1b.openSets === 1 && c1b.missing === c1b.students - 1, '오늘 할 일: 닫힌 시험은 미제출에서 빠짐', c1b);
+
+// ---------- 오류 기록 ----------
+fresh(); tk = await T();
+st = await stuLogin('가짜1반1', 'fake101');
+mock.state.fail = (m, path) => m === 'GET' && path === 'submissions';
+r = await call('/api/me', null, st);
+ok(r.status === 502 && mock.state.db.error_log.length === 1, 'DB 오류(502)는 응답 그대로 + error_log에 기록', mock.state.db.error_log);
+const e0 = mock.state.db.error_log[0];
+ok(e0.source === 'server' && e0.path === '/api/me' && e0.status === 502 && e0.method === 'GET' && /mock database is down/.test(e0.message), '기록 내용: 주소·상태·메시지', e0);
+await call('/api/me', null, st);
+ok(mock.state.db.error_log.length === 1, '같은 오류는 1분에 한 번만 기록');
+mock.state.fail = null;
+await call('/api/concept?concept=999', null, st);
+ok(mock.state.db.error_log.length === 1, '400번대(잘못된 요청)는 기록 안 함');
+r = await call('/api/t/errors?hours=24', null, tk);
+ok(r.status === 200 && r.d.count === 1 && r.d.items[0].path === '/api/me' && r.d.telegram === false, '/api/t/errors: 최근 오류 목록', r.d);
+ok((await call('/api/t/errors', null, null)).status === 401, '/api/t/errors는 교사만');
+// 화면 오류
+r = await call('/api/client-error', { message: 'x is not defined', where: '/teacher?token=abc#k teacher:12' }, null);
+ok(r.d.ok === false && mock.state.db.error_log.length === 1, '로그인 안 한 화면 오류는 무시');
+r = await call('/api/client-error', { message: 'y is not defined ' + 'z'.repeat(400), where: '/?x=1 student:3' }, st);
+const e1 = mock.state.db.error_log.at(-1);
+ok(r.d.ok && e1.source === 'student' && e1.method === 'JS' && e1.message.length === 300 && !e1.path.includes('?') && e1.path === '/ student:3', '학생 화면 오류: 기록, 300자 자름, 쿼리 문자열만 빼고 파일:줄은 남김', e1);
+r = await call('/api/client-error', { message: 'Bearer abc.def.ghi 실패', where: '/teacher' }, tk);
+ok(mock.state.db.error_log.at(-1).source === 'teacher' && !mock.state.db.error_log.at(-1).message.includes('abc.def'), '교사 화면 오류: 기록, 토큰 모양은 가림');
+// 표가 없는 DB: 앱은 그대로, 기록만 건너뜀
+fresh({ errorLog: false }); tk = await T();
+st = await stuLogin('가짜1반1', 'fake101');
+mock.state.fail = (m, path) => m === 'GET' && path === 'submissions';
+r = await call('/api/me', null, st);
+ok(r.status === 502, 'error_log 표가 없어도 원래 오류 응답은 그대로');
+mock.state.fail = null;
+r = await call('/api/t/errors', null, tk);
+ok(r.status === 200 && r.d.missing === true, '/api/t/errors: 표가 없으면 missing');
+// 텔레그램 (선택): 비밀값이 있을 때만, 같은 오류는 10분에 한 번
+fresh(); env.TELEGRAM_BOT_TOKEN = 'tg-SECRET'; env.TELEGRAM_CHAT_ID = '123';
+st = await stuLogin('가짜1반2', 'fake102');
+mock.state.fail = (m, path) => m === 'GET' && path === 'submission_history';
+await call('/api/me', null, st);
+ok(tgSent.length === 1 && tgSent[0].body.chat_id === '123' && /\/api\/me/.test(tgSent[0].body.text) && !tgSent[0].body.text.includes('tg-SECRET'), '텔레그램: 한 번 보냄, 글에 토큰 없음', tgSent);
+delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = null;
 
 console.log(n, 'checks;', bad ? bad + ' problems' : 'ALL OK');
 process.exit(bad ? 1 : 0);

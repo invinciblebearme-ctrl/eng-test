@@ -11,7 +11,7 @@
   <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades">📋 채점·성적</button><button class="tab" data-v="review">✅ 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports">📊 분석</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
   <span id="aijob" class="small" role="status" aria-live="polite"></span>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
-<div class="wrap tight"><div id="sysmsg"></div><p class="tabhelp small muted" id="tabhelp"></p></div>
+<div class="wrap tight"><div id="sysmsg"><div id="sysSchema"></div><div id="sysErr" aria-live="polite"></div></div><p class="tabhelp small muted" id="tabhelp"></p></div>
 <main class="wrap" id="app"></main>
 <div id="modal"></div>
 <div id="printArea" class="result"></div>
@@ -47,7 +47,33 @@ async function boot() {
   await loadClosed();
   $('#nav').hidden = false; $('#out').hidden = false; go('grades');
   // DB 업그레이드 확인 (안 됐으면 저장 기능이 멈추므로 위에 계속 알림)
-  T('/api/t/schema').then((r) => { $('#sysmsg').innerHTML = r.ok ? '' : `<div class="notice" role="alert">⚠️ ${esc(r.message)}</div>`; }).catch(() => {});
+  T('/api/t/schema').then((r) => { $('#sysSchema').innerHTML = r.ok ? '' : `<div class="notice" role="alert">⚠️ ${esc(r.message)}</div>`; }).catch(() => {});
+  checkErrors(); setInterval(() => { if (TOKEN && !document.hidden) checkErrors(); }, 5 * 60000);
+}
+// ---------------- ⚠️ 서버·화면 오류 알림 (최근 24시간, '확인함' 이후 새로 생긴 것만) ----------------
+const ERR_SEEN_KEY = 'eng4-err-seen';
+const errSeen = () => { try { return +(localStorage.getItem(ERR_SEEN_KEY) || 0); } catch { return 0; } };
+let ERRS = null;
+async function checkErrors() {
+  try { ERRS = await T('/api/t/errors?hours=24'); } catch { return; }
+  const el = $('#sysErr'); if (!el) return;
+  if (ERRS.missing) { el.innerHTML = ''; return; }
+  const fresh = ERRS.items.filter((x) => x.id > errSeen());
+  if (!fresh.length) { el.innerHTML = ''; return; }
+  const last = fresh[0], src = { server: '서버', teacher: '교사 화면', student: '학생 화면' };
+  el.innerHTML = `<div class="notice" role="alert">⚠️ 최근 24시간에 새 오류 <b>${fresh.length}${fresh.length >= 50 ? '+' : ''}건</b> — 마지막: ${new Date(last.at).toLocaleString('ko-KR')} · ${src[last.source] || last.source} · ${esc(last.path || '')} ${esc((last.message || '').slice(0, 80))}
+    <button class="btn sm" id="errMore">자세히</button> <button class="btn sm ghost" id="errOk">확인함</button></div>`;
+  $('#errOk').onclick = () => { try { localStorage.setItem(ERR_SEEN_KEY, String(ERRS.items[0].id)); } catch {} el.innerHTML = ''; };
+  $('#errMore').onclick = () => openErrors();
+}
+function openErrors() {
+  const sh = shell('최근 오류'), src = { server: '서버', teacher: '교사 화면', student: '학생 화면' }, seen = errSeen();
+  sh.m.innerHTML = `<div class="modal"><div class="box">
+    <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">⚠️ 최근 24시간 오류 (${ERRS.count}건${ERRS.count > 50 ? ', 최근 50건만' : ''})</b><button class="btn sm" id="x">닫기</button></div>
+    <p class="small muted">같은 오류는 1분에 한 번만 기록돼요. 30일 지난 기록은 자동으로 지워져요. ${ERRS.telegram ? '📨 텔레그램 알림 켜짐' : '텔레그램 알림은 꺼져 있어요 (Cloudflare 비밀값 TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID를 넣으면 켜짐)'}</p>
+    <table class="plain small"><tr><th>시각</th><th>어디</th><th>주소</th><th>상태</th><th>내용</th></tr>${ERRS.items.map((x) => `<tr class="${x.id > seen ? '' : 'muted'}"><td style="white-space:nowrap">${new Date(x.at).toLocaleString('ko-KR')}</td><td>${src[x.source] || esc(x.source)}</td><td>${esc(x.method || '')} ${esc(x.path || '')}</td><td>${x.status ?? ''}</td><td>${esc(x.message || '')}</td></tr>`).join('')}</table>
+  </div></div>`;
+  $('#x').onclick = () => sh.close();
 }
 // ---------------- 떠나기 전 확인: 저장 안 된 검토 변경 · 열린 상세 창 · AI 일괄 작업 ----------------
 let MODAL_DIRTY = null;   // 열린 상세 창이 고친 게 있는지 알려 주는 함수
