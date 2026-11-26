@@ -18,11 +18,14 @@ if [ -z "$TOKEN" ]; then
   npx -y wrangler@4 whoami >/dev/null 2>&1 || { echo "❌ Cloudflare 로그인이 필요해요: npx wrangler login"; exit 1; }
   TOKEN=$(python3 - <<'EOF'
 import os, re
+# wrangler가 갱신한 설정 파일은 위치가 여럿일 수 있음 → 만료 시각이 가장 늦은 토큰
+best = None
 for f in ['~/Library/Preferences/.wrangler/config/default.toml', '~/.config/.wrangler/config/default.toml', '~/.wrangler/config/default.toml']:
     p = os.path.expanduser(f)
-    if os.path.exists(p):
-        m = re.search(r'oauth_token\s*=\s*"([^"]+)"', open(p).read())
-        if m: print(m.group(1)); break
+    if not os.path.exists(p): continue
+    t = open(p).read(); m = re.search(r'oauth_token\s*=\s*"([^"]+)"', t); e = re.search(r'expiration_time\s*=\s*"([^"]+)"', t)
+    if m and (best is None or (e.group(1) if e else '') > best[0]): best = (e.group(1) if e else '', m.group(1))
+if best: print(best[1])
 EOF
 )
   [ -n "$TOKEN" ] || { echo "❌ wrangler 토큰을 찾지 못했어요: npx wrangler login"; exit 1; }
