@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 ACC=58d51fd9734db2859e760dbf82c96556; NAME=eng4-2-review
 API="https://api.cloudflare.com/client/v4/accounts/$ACC/workers/scripts/$NAME"
 
-for f in test/grade.test.mjs test/triage.test.mjs test/api.test.mjs test/api-sql.test.mjs test/teacher-syntax.test.mjs test/teacher-savequeue.test.mjs sql/upgrade-2026-11.sql; do
+for f in test/grade.test.mjs test/triage.test.mjs test/api.test.mjs test/api-sql.test.mjs test/teacher-syntax.test.mjs test/teacher-savequeue.test.mjs test/api-deploy.test.mjs sql/upgrade-2026-11.sql; do
   [ -f "$f" ] || { echo "❌ 필수 검사 파일이 없어요: $f"; exit 1; }
 done
 npm test || { echo "❌ 테스트 실패 — 배포하지 않았어요"; exit 1; }
