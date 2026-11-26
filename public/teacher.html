@@ -637,7 +637,7 @@ async function drawGrades(quiet) {
     const mine = ids.map((cid) => by[s.id + ':' + cid]);
     const got = mine.filter(Boolean);
     return `<tr><td>${s.number}</td><td class="nm">${esc(s.name)}</td>${mine.map((x, k) => x
-      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup title="AI 제안">${ico('sparkle', 11)}</sup>' : ''}${x.draft ? '<sup title="피드백 초안 (미공개)">${ico('chat', 11)}</sup>' : x.pub ? '<sup title="피드백 공개됨">${ico('megaphone', 11)}</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
+      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? `<sup title="AI 제안">${ico('sparkle', 11)}</sup>` : ''}${x.draft ? `<sup title="피드백 초안 (미공개)">${ico('chat', 11)}</sup>` : x.pub ? `<sup title="피드백 공개됨">${ico('megaphone', 11)}</sup>` : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
       : hby[s.id + ':' + ids[k]] ? `<td class="muted" title="이전: ${histTip(s.id, ids[k])}">${ico('retry', 13)}</td>` : `<td class="muted">·</td>`).join('')}<td>${got.length}</td><td>${got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) + '%' : '-'}</td></tr>`;
   }).join('')}
   <tr class="avg"><td></td><td class="nm">반 평균</td>${avg.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr>
@@ -958,7 +958,7 @@ async function drawCur() {
   if (my !== DRAW_SEQ || !$('#cur')) return;
   const act = d.students.filter((s) => !s.archived_at), arch = d.students.filter((s) => s.archived_at);
   const shown = RSHOWARCH ? d.students : act;
-  $('#cur').innerHTML = `${d.upgraded ? '' : '<div class="notice" role="alert">${ico('warn', 15)} DB 업그레이드 전이라 보관·복원과 명렬표 저장을 쓸 수 없어요. (위 안내 참고)</div>'}
+  $('#cur').innerHTML = `${d.upgraded ? '' : `<div class="notice" role="alert">${ico('warn', 15)} DB 업그레이드 전이라 보관·복원과 명렬표 저장을 쓸 수 없어요. (위 안내 참고)</div>`}
   <div class="bar" style="margin-top:0"><label><input type="checkbox" id="showArch" ${RSHOWARCH ? 'checked' : ''}> 보관된 학생도 보기 (${arch.length}명)</label></div>
   <table class="plain"><tr><th>번호</th><th>이름</th><th>학생 계정 ID (로그인용)</th><th>답</th><th></th></tr>${shown.map((s) => `<tr class="${s.archived_at ? 'archived' : ''}"><td>${s.number}</td><td>${esc(s.name)}${s.archived_at ? ` <span class="badge" title="${esc(new Date(s.archived_at).toLocaleString('ko-KR'))}">보관됨</span>` : ''}</td>
     <td><label class="sr-only" for="ids${s.id}">${esc(s.name)} 학생 계정 ID</label><input class="field small" id="ids${s.id}" data-ids="${s.id}" value="${esc((s.login_ids || []).join(', '))}" placeholder="ID 없음 — 로그인 불가" style="width:230px"> <button class="btn sm" data-saveid="${s.id}">ID 저장</button></td>
@@ -1034,7 +1034,7 @@ async function readFile() {
   if (!classes.length) { $('#pv').innerHTML = '<div class="notice">학생을 찾지 못했어요. 첫 줄에 ‘반, 번호, 이름’ 머리글이 있는지 확인해 주세요.</div>'; return; }
   $('#pv').innerHTML = `<div class="notice ok">${classes.map((c) => `<b>${c.grade}학년 ${c.class_no}반 ${c.students.length}명</b>`).join(' · ')} 을(를) 찾았어요. 아래 변경 내용을 확인하고 저장하세요.</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">${classes.map((c) => `<table class="plain"><tr><th colspan="3">${c.grade}학년 ${c.class_no}반</th></tr>${c.students.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td><td class="small">${s.login_ids ? s.login_ids.map(esc).join('<br>') : '<span class="muted">ID 없음</span>'}</td></tr>`).join('')}</table>`).join('')}</div>
-    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? '<div class="notice">${ico('warn', 15)} 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요. (이미 ID가 있는 학생은 그대로 둬요)</div>' : ''}
+    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? `<div class="notice">${ico('warn', 15)} 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요. (이미 ID가 있는 학생은 그대로 둬요)</div>` : ''}
     <label class="bar" style="cursor:pointer"><input type="checkbox" id="replaceR"> <span><b>반 전체 바꾸기</b> — 이 파일에 있는 반에서 파일에 없는 번호의 학생을 <b>보관</b>해요 (지우지 않음, 답 기록은 남고 나중에 복원 가능). 학생이 전학 가거나 번호가 바뀐 새 명렬표를 올릴 때만 켜세요.</span></label>
     <div id="diff" aria-live="polite"><p class="muted small">변경 내용을 계산하는 중…</p></div>
     <div class="bar"><button class="btn pri" id="saveR" disabled>명렬표 저장</button></div>`;
@@ -1045,7 +1045,7 @@ async function readFile() {
     let r; try { r = await T('/api/t/roster-preview', { classes: PREVIEW, archive }); } catch (e) { $('#diff').innerHTML = `<div class="notice" role="alert">${esc(e.message)}</div>`; return; }
     if (my !== seq || !$('#diff')) return;
     PV = r;
-    $('#diff').innerHTML = `${r.upgraded ? '' : '<div class="notice" role="alert">${ico('warn', 15)} DB 업그레이드 전이라 저장할 수 없어요. 위 안내대로 업그레이드 SQL을 먼저 실행해 주세요.</div>'}
+    $('#diff').innerHTML = `${r.upgraded ? '' : `<div class="notice" role="alert">${ico('warn', 15)} DB 업그레이드 전이라 저장할 수 없어요. 위 안내대로 업그레이드 SQL을 먼저 실행해 주세요.</div>`}
       ${r.classes.map((c) => `<div class="card" style="margin:8px 0"><b>${c.grade}학년 ${c.class_no}반</b> <span class="small muted">파일 ${c.total}명 · 그대로 ${c.same}명</span>
         <div class="small"><span class="diff-add">${ico('plus', 13)} 추가 ${c.add.length}명</span> · <span class="diff-upd">${ico('pen', 13)} 이름·ID 바뀜 ${c.update.length}명</span>${c.restore.length ? ` · <span class="diff-add">↩ 보관 해제 ${c.restore.length}명</span>` : ''} · <span class="diff-arch">${ico('box', 13)} 보관 ${c.archive.length}명</span></div>
         ${list(c.add, (s) => `<li class="diff-add">${s.number}번 ${esc(s.name)}</li>`)}
@@ -1094,7 +1094,7 @@ function bindCopy(root) {
 function zoomQR(c) {
   const u = testUrl(c.id), sh = shell('QR 크게 보기', null, () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }), m = sh.m;
   m.innerHTML = `<div class="modal qrzoom"><div class="box">
-    <div class="qz-top">${GRADE}학년 2학기 영어 ${CLOSED.has(c.id) ? '<span class="badge no">${ico('lock', 13)} 지금 닫혀 있어요</span>' : ''}</div>
+    <div class="qz-top">${GRADE}학년 2학기 영어 ${CLOSED.has(c.id) ? `<span class="badge no">${ico('lock', 13)} 지금 닫혀 있어요</span>` : ''}</div>
     <div class="qz-title">${esc(c.kind === 'concept' ? `개념 ${c.id} · ${c.title}` : c.title)}</div>
     <div class="qz-qr">${qrSVG(u, 10)}</div>
     <button class="qz-url linkbtn" data-copyurl="${u}" title="눌러서 복사">${u}</button>
