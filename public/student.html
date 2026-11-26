@@ -182,20 +182,16 @@ function fmtTime(iso) {
 
 // ---------- 접근성 모달 헬퍼 ----------
 function openAccessibleModal({ id, html, initialFocusSelector, onMount }) {
-  const prevFocus = document.activeElement;
   const m = document.createElement('div');
   m.className = 'modal';
   if (id) m.id = id;
-  m.setAttribute('role', 'dialog');
-  m.setAttribute('aria-modal', 'true');
   m.innerHTML = html;
   document.body.appendChild(m);
-  const close = (restoreFocus = true) => {
-    document.removeEventListener('keydown', onKey);
-    m.remove();
-    if (restoreFocus && prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
-  };
-  const onKey = (e) => {
+
+  let trap = null;
+  let closed = false;
+  const prevFocus = document.activeElement;
+  const onKeyFallback = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
     if (e.key === 'Tab') {
       const focusables = [...m.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
@@ -205,8 +201,25 @@ function openAccessibleModal({ id, html, initialFocusSelector, onMount }) {
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   };
-  document.addEventListener('keydown', onKey);
-  m.onclick = (e) => { if (e.target === m) close(true); };
+
+  const close = (restoreFocusFlag = true) => {
+    if (closed) return;
+    closed = true;
+    if (trap) trap.release();
+    else document.removeEventListener('keydown', onKeyFallback);
+    m.remove();
+    if (!trap && restoreFocusFlag && prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
+  };
+
+  if (typeof trapModal === 'function') {
+    trap = trapModal(m, { onClose: () => close(true) });
+  } else {
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    document.addEventListener('keydown', onKeyFallback);
+    m.onclick = (e) => { if (e.target === m) close(true); };
+  }
+
   if (onMount) onMount(m, close);
   const initEl = (initialFocusSelector && m.querySelector(initialFocusSelector)) || m.querySelector('button, [tabindex]');
   if (initEl) initEl.focus();
