@@ -7,14 +7,90 @@ async function api(path, body, token) {
   if (token) opt.headers.authorization = 'Bearer ' + token;
   const r = await fetch(path, opt);
   let d = null; try { d = await r.json(); } catch {}
-  if (!r.ok) { const e = new Error((d && d.error) || ('오류 ' + r.status)); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error((d && d.error) || ('오류 ' + r.status)); e.status = r.status; e.data = d || {}; throw e; }
   return d;
 }
 
-function toast(msg) {
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
-  document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
+// ---------- 알림·상태 (화면 읽기 프로그램도 읽어 줌) ----------
+// toast(글, 종류) 종류: 'ok' | 'error' | 'info'(기본). error는 조금 더 오래 보이고 role=alert
+function toast(msg, kind = 'info') {
+  let box = document.getElementById('toasts');
+  if (!box) { box = document.createElement('div'); box.id = 'toasts'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
+  const t = document.createElement('div'); t.className = 'toast' + (kind && kind !== 'info' ? ' ' + kind : ''); t.textContent = msg;
+  if (kind === 'error') t.setAttribute('role', 'alert');
+  box.appendChild(t); setTimeout(() => t.remove(), kind === 'error' ? 5000 : 2200);
 }
+// 칸 옆 상태 글: statusMsg(el, '저장 중…', 'saving' | 'saved' | 'error' | 'info'). 글이 없으면 지움
+function statusMsg(el, text, kind = 'info') {
+  if (!el) return;
+  el.setAttribute('role', kind === 'error' ? 'alert' : 'status'); el.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+  el.className = (el.className.replace(/\bst(-\w+)?\b/g, '').trim() + (text ? ` st st-${kind}` : '')).trim();
+  el.textContent = text || '';
+}
+
+// ---------- 창(모달) 접근성: role=dialog, 초점 가두기, Esc·배경 눌러 닫기, 닫으면 초점 되돌리기 ----------
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"]),audio[controls]';
+// 이미 그려진 창(container 안의 .modal > .box)에 접근성을 입힘. 안의 내용을 다시 그려도 유지됨.
+// opts: { label, onClose(), canClose() → false면 안 닫음 }. 돌려줌: { release(), tryClose() }
+function trapModal(container, opts = {}) {
+  const prev = document.activeElement;
+  const box = () => container.querySelector('.modal .box') || container.querySelector('.box');
+  const dress = () => {
+    const b = box(); if (!b) return;
+    b.setAttribute('role', 'dialog'); b.setAttribute('aria-modal', 'true'); if (!b.hasAttribute('tabindex')) b.setAttribute('tabindex', '-1');
+    if (opts.label) b.setAttribute('aria-label', opts.label);
+    if (!b.contains(document.activeElement)) { const f = b.querySelector('[autofocus]') || b.querySelector(FOCUSABLE); (f || b).focus({ preventScroll: true }); }
+  };
+  const tryClose = () => { if (opts.canClose && opts.canClose() === false) return false; if (opts.onClose) opts.onClose(); return true; };
+  const onKey = (e) => {
+    const b = box(); if (!b) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); tryClose(); return; }
+    if (e.key !== 'Tab') return;
+    const fs = [...b.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null || x === document.activeElement);
+    if (!fs.length) { e.preventDefault(); b.focus(); return; }
+    const first = fs[0], last = fs[fs.length - 1];
+    if (!b.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  const onClick = (e) => { if (e.target.classList && e.target.classList.contains('modal')) tryClose(); };
+  const mo = new MutationObserver(dress);
+  document.addEventListener('keydown', onKey, true); container.addEventListener('click', onClick);
+  mo.observe(container, { childList: true, subtree: false });
+  dress();
+  return {
+    tryClose,
+    release() {
+      document.removeEventListener('keydown', onKey, true); container.removeEventListener('click', onClick); mo.disconnect();
+      if (prev && prev.isConnected && typeof prev.focus === 'function') prev.focus({ preventScroll: true });
+    },
+  };
+}
+// 새 창 열기: openModal(html, { label, onClose, canClose, container }) → { el, box, close(), tryClose(), update(html) }
+// close()는 확인 없이 닫음, tryClose()는 canClose를 물어봄. Esc·배경 클릭은 tryClose.
+function openModal(html, opts = {}) {
+  let el = opts.container || document.getElementById('modal');
+  if (!el) { el = document.createElement('div'); el.id = 'modal'; document.body.appendChild(el); }
+  if (el._modal) el._modal.close(true);
+  el.innerHTML = `<div class="modal"><div class="box">${html}</div></div>`;
+  let closed = false;
+  const api = {
+    el, get box() { return el.querySelector('.modal .box'); },
+    update(h) { const b = el.querySelector('.modal .box'); if (b) b.innerHTML = h; },
+    close(silent) { if (closed) return; closed = true; t.release(); el._modal = null; el.innerHTML = ''; if (!silent && opts.onClose) opts.onClose(); },
+    tryClose() { return t.tryClose(); },
+  };
+  const t = trapModal(el, { label: opts.label, canClose: opts.canClose, onClose: () => api.close() });
+  el._modal = api;
+  return api;
+}
+
+// 머리줄 높이 → CSS 변수 --header-h (붙박이 줄들이 머리줄 아래에 붙도록)
+(() => {
+  const set = () => { const h = document.querySelector('header.top'); if (h) document.documentElement.style.setProperty('--header-h', h.offsetHeight + 'px'); };
+  if (typeof ResizeObserver !== 'undefined') addEventListener('DOMContentLoaded', () => { const h = document.querySelector('header.top'); if (h) new ResizeObserver(set).observe(h); set(); });
+  else addEventListener('load', set);
+})();
 
 // 🔊 영어 읽어 주기 (브라우저 내장 음성)
 let enVoice = null;

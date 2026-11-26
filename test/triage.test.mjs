@@ -41,3 +41,4 @@ for (const [cid, n, a, want] of cases) {
   console.log(got === want ? 'ok ' : 'BAD', `${cid}-${n}`, JSON.stringify(a), '→', r || '(보내지 않음)');
 }
 console.log(bad ? `${bad} wrong` : 'ALL OK');
+process.exit(bad ? 1 : 0);

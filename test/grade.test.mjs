@@ -34,3 +34,4 @@ t(24,1,['brother','오빠'],true); t(24,1,['brother',''],false); t(24,1,['bother
 t(24,11,['Who is she?','그녀는 누구니?'],true); t(24,12,["He's my dad.",'그는 내 아빠야.'],true); t(24,12,['he is my dad','그는 내 아빠야'],false); t(23,14,['It’s ten thirty.','10시 30분이야.'],true);
 console.log('pending answers:', pending.length, pending.join(' '));
 console.log(n, 'questions;', bad ? bad + ' problems' : 'ALL OK');
+process.exit(bad ? 1 : 0);
