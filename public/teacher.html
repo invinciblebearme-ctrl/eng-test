@@ -450,11 +450,46 @@ async function reportsView() {
   if (my !== DRAW_SEQ || VIEW !== 'reports') return;
   if (d.err) $('#an').innerHTML = `<div class="notice">${esc(d.err.message)}</div>`; else drawDash(d);
   if (rp.err) { $('#rp').innerHTML = `<div class="notice">${esc(rp.err.message)}</div>`; return; }
-  const md = (t) => esc(t).replace(/^### (.*)$/gm, '<h4>$1</h4>').replace(/^## (.*)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^- (.*)$/gm, '• $1');
-  $('#rp').innerHTML = rp.reports.length ? rp.reports.map((r, k) => `<details class="help" ${k ? '' : 'open'} style="margin:10px 0"><summary><b>${esc(r.title)}</b> <span class="muted small">${new Date(r.created_at).toLocaleString('ko-KR')}</span></summary>
-      <div style="white-space:pre-wrap;line-height:1.6;margin-top:8px">${md(r.body)}</div><div class="bar"><span style="flex:1"></span><button class="btn sm ghost" data-del="${r.id}">삭제</button></div></details>`).join('')
+  $('#rp').innerHTML = rp.reports.length ? rp.reports.map((r, k) => `<details class="help rpt-wrap" ${k ? '' : 'open'} style="margin:10px 0"><summary><b>${esc(r.title)}</b> <span class="muted small">${new Date(r.created_at).toLocaleString('ko-KR')}</span></summary>
+      <div class="rpt">${reportHTML(r.body)}</div><div class="bar"><span style="flex:1"></span><button class="btn sm ghost" data-del="${r.id}">삭제</button></div></details>`).join('')
     : '<div class="notice">아직 보고서가 없어요. 예약 작업이 처음 돌면 여기에 나와요.</div>';
   app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => { if (!confirm('이 보고서를 지울까요?')) return; await T('/api/t/report-delete', { id: +b.dataset.del }); reportsView(); }));
+}
+// AI 보고서 그리기: 본문이 JSON(예약 작업 새 형식)이면 요약·표·카드로, 아니면 예전 글(마크다운)을 읽기 좋게
+// JSON: { summary:[줄], classes:[{cls,students,subs,graded,wait,rate}], low:[{set,n,q,answer,rate,wrong:[]}],
+//         errors:[{title,example,tip}], help:[{reason,students:[]}], next:[{title,how}] }
+const rptTone = (v) => (v == null ? '' : v < 60 ? 'no' : v < 80 ? 'wait' : 'ok');
+const rptBar = (v) => { const n = Math.max(0, Math.min(100, Math.round(+v || 0))); return `<span class="rpt-bar ${rptTone(n)}" role="img" aria-label="정답률 ${n}%"><i style="width:${Math.max(2, n)}%"></i></span><b class="rpt-pct ${rptTone(n)}">${n}%</b>`; };
+function rptMd(t) {
+  const inl = (x) => esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  let out = '', list = null;
+  const close = () => { if (list) { out += `</${list}>`; list = null; } };
+  for (const line of String(t || '').split('\n')) {
+    let m;
+    if ((m = line.match(/^#{2,3} (.*)/))) { close(); out += `<h3 class="rpt-h">${inl(m[1])}</h3>`; }
+    else if ((m = line.match(/^\s*[-•] (.*)/))) { if (list !== 'ul') { close(); out += '<ul class="rpt-ul">'; list = 'ul'; } out += `<li>${inl(m[1])}</li>`; }
+    else if ((m = line.match(/^\s*\d+[.)] (.*)/))) { if (list !== 'ol') { close(); out += '<ol class="rpt-ul">'; list = 'ol'; } out += `<li>${inl(m[1])}</li>`; }
+    else if (line.trim()) { close(); out += `<p>${inl(line)}</p>`; }
+  }
+  close(); return out;
+}
+function reportHTML(body) {
+  let d = null; const t = String(body || '').trim();
+  if (t.startsWith('{')) { try { d = JSON.parse(t); } catch { d = null; } }
+  if (!d || typeof d !== 'object') return `<div class="rpt-old">${rptMd(t)}</div>`;
+  const arr = (x) => (Array.isArray(x) ? x : []);
+  const sec = (title, inner) => (inner ? `<section class="rpt-sec"><h3 class="rpt-h">${title}</h3>${inner}</section>` : '');
+  const classes = arr(d.classes), low = arr(d.low), errors = arr(d.errors), help = arr(d.help), next = arr(d.next);
+  const tot = classes.reduce((a, c) => ({ subs: a.subs + (+c.subs || 0), wait: a.wait + (+c.wait || 0), stu: a.stu + (+c.students || 0) }), { subs: 0, wait: 0, stu: 0 });
+  const avg = classes.length && tot.subs ? Math.round(classes.reduce((a, c) => a + (+c.rate || 0) * (+c.subs || 0), 0) / tot.subs) : null;
+  const helpN = help.reduce((a, h) => a + arr(h.students).length, 0);
+  return `${arr(d.summary).length ? `<div class="rpt-sum"><b>📌 한눈에</b><ul>${arr(d.summary).slice(0, 3).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    ${classes.length ? `<div class="rpt-kpis"><div class="rpt-kpi"><span>제출</span><b>${tot.subs}건</b></div><div class="rpt-kpi ${tot.wait ? 'wait' : ''}"><span>확정 대기</span><b>${tot.wait}건</b></div>${avg != null ? `<div class="rpt-kpi ${rptTone(avg)}"><span>평균 정답률</span><b>${avg}%</b></div>` : ''}<div class="rpt-kpi ${helpN ? 'no' : ''}"><span>도움 필요</span><b>${helpN}명</b></div></div>` : ''}
+    ${sec('🏫 반별 현황', classes.length ? `<div class="rpt-scroll"><table class="rpt-tbl"><thead><tr><th>반</th><th>학생</th><th>제출</th><th>대기</th><th class="w">정답률</th></tr></thead><tbody>${classes.map((c) => `<tr><td><b>${esc(c.cls)}반</b></td><td>${esc(c.students ?? '')}</td><td>${esc(c.subs ?? '')}</td><td>${+c.wait ? `<span class="badge wait">${esc(c.wait)}</span>` : '0'}</td><td class="w">${c.rate != null ? rptBar(c.rate) : '-'}</td></tr>`).join('')}</tbody></table></div>` : '')}
+    ${sec('📉 정답률 낮은 문항', low.length ? `<div class="rpt-scroll"><table class="rpt-tbl rpt-low"><thead><tr><th>문항</th><th>정답</th><th class="w">정답률</th><th>자주 나온 오답</th></tr></thead><tbody>${low.map((x) => `<tr><td><b>${esc(x.set || '')} ${esc(x.n ?? '')}번</b>${x.q ? `<div class="small muted">${esc(x.q)}</div>` : ''}</td><td class="en"><b>${esc(x.answer || '')}</b></td><td class="w">${rptBar(x.rate)}</td><td>${arr(x.wrong).slice(0, 3).map((w) => `<span class="rpt-wrong en">${esc(w)}</span>`).join(' ')}</td></tr>`).join('')}</tbody></table></div>` : '')}
+    ${sec('🔎 자주 틀리는 유형', errors.length ? `<div class="rpt-cards">${errors.map((e) => `<div class="rpt-card"><b>${esc(e.title || '')}</b>${e.example ? `<div class="rpt-ex en">${esc(e.example)}</div>` : ''}${e.tip ? `<div class="small">💡 ${esc(e.tip)}</div>` : ''}</div>`).join('')}</div>` : '')}
+    ${sec('🙋 도움이 필요한 학생', help.length ? `<details class="rpt-help"><summary>${helpN}명 보기 (이름 포함)</summary>${help.map((h) => `<div class="rpt-hrow"><div class="small"><b>${esc(h.reason || '')}</b></div><div>${arr(h.students).map((n) => `<span class="badge">${esc(n)}</span>`).join(' ')}</div></div>`).join('')}</details>` : '')}
+    ${sec('🧑‍🏫 다음 수업 제안', next.length ? `<ol class="rpt-next">${next.map((n) => `<li><b>${esc(n.title || '')}</b>${n.how ? `<div class="small muted">${esc(n.how)}</div>` : ''}</li>`).join('')}</ol>` : '')}`;
 }
 const pct = (x) => Math.round(x * 100);
 const barHTML = (v, label, tip) => `<div class="hb" title="${esc(tip || '')}"><div class="hbt"><i style="width:${Math.max(1, pct(v))}%"></i></div><b>${label}</b></div>`;
