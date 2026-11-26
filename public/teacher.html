@@ -8,9 +8,9 @@
 </head>
 <body class="role-teacher">
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
-  <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades">📋 채점·성적</button><button class="tab" data-v="review">✅ 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports">📊 분석</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
+  <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2h6v4H9z"/><path d="M9 11h6"/><path d="M9 15h4"/></svg> 채점·성적</button><button class="tab" data-v="review"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5.1"/></svg> 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M8 17v-5"/><path d="M13 17V9"/><path d="M18 17v-8"/></svg> 분석</button><button class="tab" data-v="links"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/></svg> 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
   <span id="aijob" class="small" role="status" aria-live="polite"></span>
-  <button id="themeBtn" class="btn sm ghost" hidden title="교사·학생 화면 테마 설정">🎨 테마</button>
+  <button id="themeBtn" class="btn sm ghost" hidden title="교사·학생 화면 테마 설정"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.2-1.8 3.5-3.5 3.5H16a2 2 0 0 0-2 2c0 1.4.8 2.5.8 3.2 0 .8-.7 1.3-2.8 1.3z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/></svg> 테마</button>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
 <div class="wrap tight"><div id="sysmsg"><div id="sysSchema"></div><div id="sysErr" aria-live="polite"></div></div><p class="tabhelp small muted" id="tabhelp"></p></div>
 <main class="wrap" id="app"></main>
@@ -50,10 +50,10 @@ async function openThemeModal() {
   try { stuTheme = (await api('/api/theme')).studentTheme || 'default'; } catch {}
   const curTeacher = document.documentElement.dataset.theme || 'default';
   const cards = (list, active, attr) => `<div class="theme-grid">${list.map((t) => `<button type="button" class="theme-card ${active === t.id ? 'on' : ''}" data-${attr}="${t.id}" aria-pressed="${active === t.id}"><span class="theme-swatches">${t.sw.map((c) => `<i style="background:${c}"></i>`).join('')}</span><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join('')}</div>`;
-  const sh = openModal(`<div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🎨 화면 테마 설정</b><button class="btn sm" id="thClose">닫기</button></div>
-    <h3 style="margin:8px 0 4px;font-size:16px">👩‍🏫 내 화면 (교사) — 이 기기에서만 즉시 바뀌어요</h3>
+  const sh = openModal(`<div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${ico('palette', 20)} 화면 테마 설정</b><button class="btn sm" id="thClose">닫기</button></div>
+    <h3 style="margin:8px 0 4px;font-size:16px">내 화면 (교사) — 이 기기에서만 즉시 바뀌어요</h3>
     ${cards(THEME_META, curTeacher, 'ttheme')}
-    <h3 style="margin:12px 0 4px;font-size:16px">🧑‍🎓 학생 화면 — 모든 학생에게 공통 적용돼요</h3>
+    <h3 style="margin:12px 0 4px;font-size:16px">학생 화면 — 모든 학생에게 공통 적용돼요</h3>
     <p class="small muted" style="margin:0 0 6px">학생은 직접 테마를 바꿀 수 없고, 선생님이 고른 테마가 자동으로 적용됩니다.</p>
     ${cards(THEME_META.filter((t) => !t.teacherOnly), stuTheme, 'stheme')}
     <div id="thStatus" class="small" style="min-height:22px"></div>`, { label: '화면 테마 설정' });
@@ -190,12 +190,12 @@ function todayHTML(onlyCls) {
   const rows = onlyCls ? TODAY.filter((c) => c.class_no === onlyCls) : TODAY;
   if (!rows.length) return '';
   const sum = (k) => rows.reduce((a, c) => a + c[k], 0);
-  const tile = (k, icon, label, act, hint) => `<div class="tile ${sum(k) ? 'warn' : 'done'}"><b>${sum(k)}</b><span>${icon} ${label}</span>${sum(k) && act ? `<button class="btn sm" data-tgo="${act}:${onlyCls || 0}">${hint}</button>` : '<span class="small muted">없음</span>'}</div>`;
-  if (onlyCls) return `<div class="today compact" role="region" aria-label="오늘 할 일"><b>📋 오늘 할 일 · ${GRADE}학년 ${onlyCls}반</b>
-    ${tile('wait', '⏳', '채점 대기', 'wait', '✅ 검토·공개에서 처리 →')}${tile('aiSuggest', '🤖', 'AI 제안 미검토', 'wait', '검토하기 →')}${tile('unpub', '💬', '피드백 미공개', 'unpub', '공개하기 →')}
-    <div class="tile ${sum('missing') ? 'warn' : 'done'}"><b>${sum('missing')}</b><span>📭 미제출 칸</span><span class="small muted">열린 시험 ${rows[0].openSets}개 기준 · 아래 표의 · 칸</span></div></div>`;
-  return `<section class="today" role="region" aria-label="오늘 할 일"><h3 style="margin:0 0 8px">📋 오늘 할 일 · ${GRADE}학년 전체</h3>
-    <div class="today-tiles">${tile('wait', '⏳', '채점 대기', 'wait', '지금 보기')}${tile('aiSuggest', '🤖', 'AI 제안 미검토', 'wait', '지금 보기')}${tile('unpub', '💬', '피드백 미공개', 'unpub', '지금 보기')}<div class="tile ${sum('missing') ? 'warn' : 'done'}"><b>${sum('missing')}</b><span>📭 미제출 칸</span><span class="small muted">열린 시험 기준</span></div></div>
+  const tile = (k, iconName, label, act, hint) => `<div class="tile ${sum(k) ? 'warn' : 'done'}"><b>${sum(k)}</b><span>${ico(iconName, 15)} ${label}</span>${sum(k) && act ? `<button class="btn sm" data-tgo="${act}:${onlyCls || 0}">${hint}</button>` : '<span class="small muted">없음</span>'}</div>`;
+  if (onlyCls) return `<div class="today compact" role="region" aria-label="오늘 할 일"><b>${ico('board', 16)} 오늘 할 일 · ${GRADE}학년 ${onlyCls}반</b>
+    ${tile('wait', 'clock', '채점 대기', 'wait', '검토·공개에서 처리 →')}${tile('aiSuggest', 'sparkle', 'AI 제안 미검토', 'wait', '검토하기 →')}${tile('unpub', 'chat', '피드백 미공개', 'unpub', '공개하기 →')}
+    <div class="tile ${sum('missing') ? 'warn' : 'done'}"><b>${sum('missing')}</b><span>${ico('inbox', 15)} 미제출 칸</span><span class="small muted">열린 시험 ${rows[0].openSets}개 기준 · 아래 표의 · 칸</span></div></div>`;
+  return `<section class="today" role="region" aria-label="오늘 할 일"><h3 style="margin:0 0 8px">${ico('board', 18)} 오늘 할 일 · ${GRADE}학년 전체</h3>
+    <div class="today-tiles">${tile('wait', 'clock', '채점 대기', 'wait', '지금 보기')}${tile('aiSuggest', 'sparkle', 'AI 제안 미검토', 'wait', '지금 보기')}${tile('unpub', 'chat', '피드백 미공개', 'unpub', '지금 보기')}<div class="tile ${sum('missing') ? 'warn' : 'done'}"><b>${sum('missing')}</b><span>${ico('inbox', 15)} 미제출 칸</span><span class="small muted">열린 시험 기준</span></div></div>
     <table class="plain small"><tr><th>반</th><th>채점 대기</th><th>AI 제안</th><th>피드백 미공개</th><th>미제출 칸</th></tr>${rows.map((c) => `<tr><td><b>${c.class_no}반</b> <span class="muted">${c.students}명</span></td>
       <td>${c.wait ? `<button class="linkbtn" data-tgo="wait:${c.class_no}">${c.wait}건</button>` : '0'}</td><td>${c.aiSuggest || 0}</td>
       <td>${c.unpub ? `<button class="linkbtn" data-tgo="unpub:${c.class_no}">${c.unpub}건</button>` : '0'}</td>
@@ -303,7 +303,7 @@ function rvGroups() {
   return [...m.values()].sort((a, b) => order[a.c.id] - order[b.c.id] || a.i - b.i || b.items.length - a.items.length);
 }
 // 카드의 상태 표시: 채점(대기/확정) · AI 제안 · 선생님 검토 · 공개
-const rvBadges = (r) => `<span class="badge ${r.status === 'graded' ? 'ok' : 'wait'}">${r.status === 'graded' ? '확정됨' : '채점 대기'}</span>${r.ai ? ' <span class="badge ai" title="AI가 O/X를 제안했어요 (선생님 확인 전)">🤖 AI 제안</span>' : ''}${r.reviewed_at ? ' <span class="badge ok">✓ 검토함</span>' : ''}${r.feedback ? ' <span class="badge pub">📣 피드백 공개됨</span>' : r.feedback_draft ? ' <span class="badge">💬 초안 (미공개)</span>' : ''}${rvWarn(r) ? ' <span class="badge no">⚠️ 피드백 확인 필요</span>' : ''}`;
+const rvBadges = (r) => `<span class="badge ${r.status === 'graded' ? 'ok' : 'wait'}">${r.status === 'graded' ? '확정됨' : '채점 대기'}</span>${r.ai ? ` <span class="badge ai" title="AI가 O/X를 제안했어요 (선생님 확인 전)">${ico('sparkle', 13)} AI 제안</span>` : ''}${r.reviewed_at ? ' <span class="badge ok">✓ 검토함</span>' : ''}${r.feedback ? ` <span class="badge pub">${ico('megaphone', 13)} 피드백 공개됨</span>` : r.feedback_draft ? ` <span class="badge">${ico('chat', 13)} 초안 (미공개)</span>` : ''}${rvWarn(r) ? ` <span class="badge no">${ico('warn', 13)} 피드백 확인 필요</span>` : ''}`;
 function drawReview() {
   const el = $('#rvBody'); if (!el || !RV.data) return;
   const fk = el.contains(document.activeElement) ? focusKey(document.activeElement) : null;
@@ -588,13 +588,13 @@ async function drawGrades(quiet) {
     ${grp === 'unit' ? `<div class="tabs ufc"><button class="tab ${uf === 'all' ? 'on' : ''}" data-uf="all">전체</button>${units.map(([k, u]) => `<button class="tab ${uf === k ? 'on' : ''}" data-uf="${k}">${esc(u)}</button>`).join('')}</div>` : ''}
   </div>
   <div class="bar actions">
-    <button class="btn sm pri" id="confirmAll">✔ 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
-    <button class="btn sm" id="aiAll" data-off="${d.aiEnabled ? 0 : 1}" ${d.aiEnabled && !AIJOB.running ? '' : 'disabled'} ${d.aiEnabled ? 'title="애매한 오답만 AI에게 보내 O/X를 제안받아요 (확정 전 제안)"' : 'title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 제안 받기 (${aiTodo.length}건 · ${aiItems}문항)</button>
-    <button class="btn sm" id="reissue">🔁 재출제</button>${drafts ? `<button class="btn sm" id="pubDraft" title="확정된 결과에 AI 피드백 초안을 '선생님 말씀'으로 공개해요 (선생님이 쓴 말이 있으면 그대로)">💬 피드백 초안 공개 (${drafts})</button>` : ''}
-    ${d.aiEnabled ? '<button class="btn sm ghost" id="aiCheck" title="예시 답 2개로 AI 연결을 확인해요 (저장 안 함)">🔌 AI 연결 확인</button>' : ''}
-    <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
+    <button class="btn sm pri" id="confirmAll">${ico('check', 14)} 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
+    <button class="btn sm" id="aiAll" data-off="${d.aiEnabled ? 0 : 1}" ${d.aiEnabled && !AIJOB.running ? '' : 'disabled'} ${d.aiEnabled ? 'title="애매한 오답만 AI에게 보내 O/X를 제안받아요 (확정 전 제안)"' : 'title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>${ico('sparkle', 14)} AI 제안 받기 (${aiTodo.length}건 · ${aiItems}문항)</button>
+    <button class="btn sm" id="reissue">${ico('retry', 14)} 재출제</button>${drafts ? `<button class="btn sm" id="pubDraft" title="확정된 결과에 AI 피드백 초안을 '선생님 말씀'으로 공개해요 (선생님이 쓴 말이 있으면 그대로)">${ico('chat', 14)} 피드백 초안 공개 (${drafts})</button>` : ''}
+    ${d.aiEnabled ? `<button class="btn sm ghost" id="aiCheck" title="예시 답 2개로 AI 연결을 확인해요 (저장 안 함)">${ico('sparkle', 14)} AI 연결 확인</button>` : ''}
+    <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">${ico('retry', 14)} 재채점</button>
     <span style="flex:1"></span>
-    <button class="btn sm" id="bulkPrint">🖨 결과 출력</button>
+    <button class="btn sm" id="bulkPrint">${ico('print', 14)} 결과 출력</button>
     <button class="btn sm ghost" id="csv">⬇ CSV</button><button class="btn sm ghost" id="rf">↻ 새로고침</button>
   </div>
   <div class="mxwrap"><table class="mx"><thead><tr><th>번호</th><th>이름</th>${ids.map((i) => { const c = KEY.find((x) => x.id === i); return `<th title="${esc(c.title)} (${c.questions.length}문제)${CLOSED.has(i) ? ' · 닫힘' : ''}" class="${CLOSED.has(i) ? 'muted' : ''}">${CLOSED.has(i) ? '🔒' : kindIcon[c.kind]}${esc(c.short)}</th>`; }).join('')}<th>제출</th><th>정답률</th></tr></thead><tbody>

@@ -99,6 +99,7 @@ function bootEnv(apiImpl) {
     },
     $: (sel) => els.get(sel) || createEl(sel),
     esc: (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    ico: () => '',
     optLabel: (o) => String(o ?? ''),
     fillSummary: (h) => String(h ?? ''),
     bindSpeak() {},

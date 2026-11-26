@@ -1,6 +1,40 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// ---------- 커스텀 SVG 아이콘 세트 (5종 테마 currentColor 자동 연동) ----------
+const ICONS = {
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  note: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>',
+  word: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5.1"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/>',
+  sound: '<path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>',
+  print: '<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/>',
+  retry: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 3v3"/><path d="M17.5 4.5h3"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17v-5"/><path d="M13 17V9"/><path d="M18 17v-8"/>',
+  board: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2h6v4H9z"/><path d="M9 11h6"/><path d="M9 15h4"/>',
+  palette: '<path d="M12 22a10 10 0 1 1 10-10c0 2.2-1.8 3.5-3.5 3.5H16a2 2 0 0 0-2 2c0 1.4.8 2.5.8 3.2 0 .8-.7 1.3-2.8 1.3z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/>',
+  star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3z"/>',
+  eye: '<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M17.9 17.9A10.9 10.9 0 0 1 12 19c-6.2 0-10-7-10-7a18.5 18.5 0 0 1 5.1-5.9"/><path d="M9.9 4.2A10.8 10.8 0 0 1 12 4c6.2 0 10 7 10 7a18.5 18.5 0 0 1-2.2 3.2"/><path d="M3 3l18 18"/>',
+  send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>',
+  warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z"/>',
+  megaphone: '<path d="m3 11 16-5v12L3 13v-2z"/><path d="M11 15v4a2 2 0 0 1-2 2H8l-1-6"/>',
+};
+function ico(name, size = 16) {
+  const p = ICONS[name] || '';
+  return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
+
 async function api(path, body, token) {
   if (token) LAST_TOKEN = token;
   const opt = { method: body ? 'POST' : 'GET', headers: {} };
@@ -231,7 +265,7 @@ function mediaHTML(q) {
   if (q.audio) s += `<audio class="aud" controls preload="none" controlslist="nodownload" src="${mediaUrl(q.audio)}"></audio>`;
   if (q.img) s += `<img class="qimg" src="${mediaUrl(q.img)}" alt="">`;
   if (q.imgs) s += q.imgs.map((x) => `<img class="qimg sm" src="${mediaUrl(x)}" alt="">`).join('');
-  if (q.say) s += `<button class="say" data-say="${esc(q.say)}">🔊 듣기</button>`;
+  if (q.say) s += `<button class="say" data-say="${esc(q.say)}">${ico('sound', 16)} 듣기</button>`;
   if (q.clock) s += clockSVG(q.clock[0], q.clock[1], 150);
   if (q.money) s += moneyHTML(q.money);
   if (q.color) s += `<div class="colorbox" style="background:${esc(q.color)}"></div>`;
@@ -269,7 +303,7 @@ function resultItemsHTML(c, sub, correct) {
   }).join('');
 }
 // 선생님 말씀 카드 (결과 화면·출력 공통)
-const teacherNoteHTML = (fb) => (fb ? `<div class="tnote"><div class="tnh">👩‍🏫 선생님이 남긴 말</div><p>${esc(fb).replace(/\n/g, '<br>')}</p></div>` : '');
+const teacherNoteHTML = (fb) => (fb ? `<div class="tnote"><div class="tnh"><img class="illus illus-teacher" src="/img/teacher-avatar.jpg" alt=""> 선생님이 남긴 말</div><p>${esc(fb).replace(/\n/g, '<br>')}</p></div>` : '');
 // 한 학생의 결과 모음 (parts: [{c, sub, correct}])
 function studentReportHTML(st, parts, detail, gradeLabel) {
   const total = parts.reduce((a, p) => a + p.sub.score, 0), max = parts.reduce((a, p) => a + p.c.questions.length, 0);

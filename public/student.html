@@ -344,11 +344,11 @@ function showBookmarkHelp() {
     label: '즐겨찾기 추가',
     initialFocusSelector: '#favOk',
     html: `<div class="box" style="max-width:520px;text-align:center">
-      <h2 style="margin-top:0">⭐ 즐겨찾기 추가</h2>
+      <h2 style="margin-top:0">${ico('star', 22)} 즐겨찾기 추가</h2>
       <p class="muted">다음부터 이 주소로 바로 들어올 수 있어요</p>
       <div class="fav-how">${how}</div>
       <p class="fav-url">${esc(url)}</p>
-      <div class="bar" style="justify-content:center"><button type="button" class="btn" id="favCopy">📋 주소 복사</button><button type="button" class="btn pri" id="favOk">알겠어요</button></div></div>`,
+      <div class="bar" style="justify-content:center"><button type="button" class="btn" id="favCopy">${ico('copy')} 주소 복사</button><button type="button" class="btn pri" id="favOk">알겠어요</button></div></div>`,
     onMount: (m, close) => {
       m.querySelector('#favOk').onclick = () => close(true);
       m.querySelector('#favCopy').onclick = async () => {
@@ -366,7 +366,7 @@ function showBookmarkHelp() {
 function login(msg) {
   VIEW_SEQ++;
   setDraftSaveFailed(false);
-  app.innerHTML = `<div class="center-screen"><h2>안녕하세요! 👋</h2><p class="lead">이름과 학생 계정 ID를 써서 들어와요.${GO ? '<br><b>들어가면 바로 시험이 열려요.</b>' : ''}</p>
+  app.innerHTML = `<div class="center-screen"><img class="illus illus-hero" src="/img/mascot-welcome.jpg" alt=""><h2>안녕하세요!</h2><p class="lead">이름과 학생 계정 ID를 써서 들어와요.${GO ? '<br><b>들어가면 바로 시험이 열려요.</b>' : ''}</p>
   <form id="lf" class="card">
     <label class="small muted" for="nm">이름</label>
     <input id="nm" class="field" style="width:100%;font-size:19px;margin:4px 0 14px" autocomplete="off" placeholder="예: 김하늘">
@@ -375,7 +375,7 @@ function login(msg) {
     <div id="lmsg" role="alert">${msg ? `<div class="notice">${esc(msg)}</div>` : ''}</div>
     <button class="btn pri" style="width:100%;margin-top:6px">들어가기</button>
   </form></div>
-  <button type="button" class="favbtn" id="fav">⭐ 즐겨찾기 추가</button>`;
+  <button type="button" class="favbtn" id="fav">${ico('star', 18)} 즐겨찾기 추가</button>`;
   $('#fav').onclick = showBookmarkHelp;
   $('#nm').focus();
   $('#lf').onsubmit = async (e) => {
@@ -392,10 +392,10 @@ function login(msg) {
 function tileState(s, c) {
   const n = questionCountOf(c);
   if (!s && c.open === false) {
-    return { badge: '<span class="badge">🔒 아직 열리지 않았어요</span>', cta: '열리면 풀 수 있어요' };
+    return { badge: `<span class="badge">${ico('lock', 13)} 아직 열리지 않았어요</span>`, cta: '열리면 풀 수 있어요' };
   }
   if (s && s.status === 'graded') {
-    const note = s.note ? ' <span class="badge note">💬 선생님 말씀</span>' : '';
+    const note = s.note ? ` <span class="badge note">${ico('chat', 13)} 선생님 말씀</span>` : '';
     return {
       badge: `<span class="badge ${s.score >= n * 0.8 ? 'ok' : 'no'}">채점 완료 · ${s.score}/${n}</span>${note}`,
       cta: '결과 확인 →',
@@ -403,12 +403,12 @@ function tileState(s, c) {
   }
   if (s) {
     return {
-      badge: '<span class="badge wait">제출 완료 · 채점 기다리는 중</span>',
+      badge: `<span class="badge wait">${ico('clock', 13)} 제출 완료 · 채점 기다리는 중</span>`,
       cta: c.kind === 'concept' && !c.locked ? '고쳐서 다시 내기 →' : '제출 상태 보기',
     };
   }
   if (ME && hasActiveDraft(ME.id, c)) {
-    return { badge: '<span class="badge draft">📝 이어서 풀기</span>', cta: '이어서 풀기 →' };
+    return { badge: `<span class="badge draft">${ico('pen', 13)} 이어서 풀기</span>`, cta: '이어서 풀기 →' };
   }
   return { badge: '<span class="badge">지금 풀 시험</span>', cta: '문제 풀기 →' };
 }
@@ -421,10 +421,10 @@ const tileHTML = (c) => {
   const n = questionCountOf(c);
   const st = tileState(SUBS[c.id], c);
   const retakeBadge = !SUBS[c.id] && RETAKE[c.id] && c.open !== false
-    ? `<span class="badge wait">🔁 ${RETAKE[c.id] + 1}차 다시 풀기</span>`
+    ? `<span class="badge wait">${ico('retry', 13)} ${RETAKE[c.id] + 1}차 다시 풀기</span>`
     : SUBS[c.id] && SUBS[c.id].attempt > 1 ? `<span class="badge">${SUBS[c.id].attempt}차</span>` : '';
   return `<button type="button" class="tile${c.open === false && !SUBS[c.id] ? ' closed' : ''}" data-k="${c.id}" data-u="${unitColorIdx(c)}">
-    <span class="num">${c.kind === 'concept' ? `개념 ${c.id} · ${esc(c.unit)}` : `${c.kind === 'word' ? '🔤 단어 시험' : c.kind === 'spelltest' ? '✍️ 철자 시험' : '📝 단원평가'} · ${n}문제`}</span>
+    <span class="num">${c.kind === 'concept' ? `개념 ${c.id} · ${esc(c.unit)}` : `${c.kind === 'word' ? `${ico('word', 14)} 단어 시험` : c.kind === 'spelltest' ? `${ico('pen', 14)} 철자 시험` : `${ico('note', 14)} 단원평가`} · ${n}문제`}</span>
     <div class="ttl">${esc(c.title)}</div>
     <div class="tile-foot"><span>${st.badge} ${retakeBadge}</span><span class="tile-cta">${st.cta}</span></div>
   </button>`;
@@ -440,10 +440,10 @@ function home() {
   const doneOpen = openSets.filter((c) => SUBS[c.id]).length;
   const closedDone = CONCEPTS.filter((c) => c.open === false && SUBS[c.id]).length;
   const pct = openSets.length ? (doneOpen / openSets.length * 100) : 0;
-  app.innerHTML = `<h2>${esc(ME.name)}, 오늘도 화이팅! 💪</h2>
+  app.innerHTML = `<div class="home-hero"><img class="illus illus-home" src="/img/mascot-cheer.jpg" alt=""><h2>${esc(ME.name)}, 오늘도 화이팅!</h2></div>
   <p class="lead">세트를 눌러 문제를 풀거나 결과를 확인해요. <span class="small">(기본 개념은 채점 전까지 다시 낼 수 있고, 단어·철자·단원평가는 1회 평가예요)</span></p>
-  <div class="bar"><b>열린 시험 제출 ${doneOpen} / ${openSets.length}</b>${closedDone ? ` <span class="small muted">(닫힌 시험 제출 ${closedDone}건)</span>` : ''}<div class="progress" role="progressbar" aria-label="열린 시험 제출 진행률" aria-valuenow="${doneOpen}" aria-valuemin="0" aria-valuemax="${openSets.length}"><i style="width:${pct}%"></i></div><button type="button" class="btn sm" id="rf">새로고침</button><button type="button" class="btn sm" id="allr">📄 내 결과 모아 보기·출력</button></div>
-  ${hasConcepts ? `<div class="tabs menu" role="tablist" aria-label="시험 분류"><button type="button" role="tab" aria-selected="${MENU === 'concept'}" class="tab ${MENU === 'concept' ? 'on' : ''}" data-menu="concept">📘 기본 개념</button><button type="button" role="tab" aria-selected="${MENU === 'unit'}" class="tab ${MENU === 'unit' ? 'on' : ''}" data-menu="unit">📝 단원 평가</button></div>` : '<h3 class="grp">📝 단원 평가</h3>'}
+  <div class="bar"><b>열린 시험 제출 ${doneOpen} / ${openSets.length}</b>${closedDone ? ` <span class="small muted">(닫힌 시험 제출 ${closedDone}건)</span>` : ''}<div class="progress" role="progressbar" aria-label="열린 시험 제출 진행률" aria-valuenow="${doneOpen}" aria-valuemin="0" aria-valuemax="${openSets.length}"><i style="width:${pct}%"></i></div><button type="button" class="btn sm" id="rf">${ico('retry', 14)} 새로고침</button><button type="button" class="btn sm" id="allr">${ico('note', 14)} 내 결과 모아 보기·출력</button></div>
+  ${hasConcepts ? `<div class="tabs menu" role="tablist" aria-label="시험 분류"><button type="button" role="tab" aria-selected="${MENU === 'concept'}" class="tab ${MENU === 'concept' ? 'on' : ''}" data-menu="concept">${ico('book', 17)} 기본 개념</button><button type="button" role="tab" aria-selected="${MENU === 'unit'}" class="tab ${MENU === 'unit' ? 'on' : ''}" data-menu="unit">${ico('note', 17)} 단원 평가</button></div>` : `<h3 class="grp">${ico('note', 19)} 단원 평가</h3>`}
   ${MENU === 'unit' ? UNITS.map((u) => {
     const sets = CONCEPTS.filter((c) => c.ukey === u.key);
     const word = sets.find((c) => c.kind === 'word'), exams = sets.filter((c) => c.kind === 'exam');
@@ -451,7 +451,7 @@ function home() {
       ${word ? tileHTML(word) : ''}
       ${sets.filter((c) => c.kind === 'spelltest').map(tileHTML).join('')}
       ${exams.length ? exams.map(tileHTML).join('') : `<div class="tile soon"><span class="num">${esc(u.name)}</span><div class="ttl">단원평가 문제지</div><span class="badge">준비 중</span></div>`}</div>`;
-  }).join('') : `<h3 class="grp">📘 기본 개념 정리 · 확인 문제 (10문제씩)</h3>
+  }).join('') : `<h3 class="grp">${ico('book', 19)} 기본 개념 정리 · 확인 문제 (10문제씩)</h3>
   <div class="grid g-concepts">${CONCEPTS.filter((c) => c.kind === 'concept').map(tileHTML).join('')}</div>`}`;
   app.querySelectorAll('[data-menu]').forEach((b) => (b.onclick = () => { MENU = b.dataset.menu; safeSetLS('eng4-menu', MENU); home(); }));
   app.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => concept(+b.dataset.k)));
@@ -497,16 +497,16 @@ async function concept(id) {
     : '1회 평가 · 한 번 제출하면 바꿀 수 없어요.';
   app.innerHTML = `<button type="button" class="btn sm" id="back">${backLabel}</button>
   <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2>
-  <p class="lead">${esc(c.lead || '')}${c.hidden && !s ? '' : ' <span class="small">(영어를 누르면 소리가 나와요 🔊)</span>'}</p>
+  <p class="lead">${esc(c.lead || '')}${c.hidden && !s ? '' : ` <span class="small">(영어를 누르면 소리가 나와요 ${ico('sound', 14)})</span>`}</p>
   <p class="small muted" style="margin:-8px 0 12px">${ruleText}</p>
-  <div id="sum">${c.hidden ? (s ? '<p class="muted">정리 내용을 불러오는 중…</p>' : `<div class="notice">🔒 ${c.kind === 'concept' ? '개념 정리는 확인 문제를 낸 뒤에' : '낱말·표현 정리는 시험을 낸 뒤에'} 볼 수 있어요.</div>`) : fillSummary(c.summary || '')}</div>
+  <div id="sum">${c.hidden ? (s ? '<p class="muted">정리 내용을 불러오는 중…</p>' : `<div class="notice">${ico('lock', 15)} ${c.kind === 'concept' ? '개념 정리는 확인 문제를 낸 뒤에' : '낱말·표현 정리는 시험을 낸 뒤에'} 볼 수 있어요.</div>`) : fillSummary(c.summary || '')}</div>
   <div id="qarea"></div>`;
   $('#back').onclick = goHomeSafe;
   if (c.hidden && s) {
     try {
       const sumRes = await S(`/api/summary?concept=${id}`);
       if (seq !== VIEW_SEQ) return;
-      $('#sum').innerHTML = `<h3 class="grp">📖 정리 (${c.kind === 'concept' ? '확인 문제를 내서' : '시험을 내서'} 열렸어요)</h3>${fillSummary(sumRes.summary)}`;
+      $('#sum').innerHTML = `<h3 class="grp">${ico('book', 18)} 정리 (${c.kind === 'concept' ? '확인 문제를 내서' : '시험을 내서'} 열렸어요)</h3>${fillSummary(sumRes.summary)}`;
     } catch {
       if (seq === VIEW_SEQ) $('#sum').innerHTML = '';
     }
@@ -522,11 +522,11 @@ async function concept(id) {
       if (seq === VIEW_SEQ) qa.innerHTML = `<div class="notice">${esc(e.message)}</div>`;
     }
   } else {
-    if (!s && c.open === false) { qa.innerHTML = '<div class="notice">🔒 이 시험은 아직 열리지 않았어요. 선생님이 열어 주시면 풀 수 있어요.</div>'; return; }
-    if (s && c.locked) { qa.innerHTML = '<div class="notice ok">✅ 시험을 냈어요. 선생님이 채점하면 결과를 볼 수 있어요.</div>'; return; }
+    if (!s && c.open === false) { qa.innerHTML = `<div class="notice">${ico('lock', 15)} 이 시험은 아직 열리지 않았어요. 선생님이 열어 주시면 풀 수 있어요.</div>`; return; }
+    if (s && c.locked) { qa.innerHTML = `<div class="notice ok">${ico('check', 15)} 시험을 냈어요. 선생님이 채점하면 결과를 볼 수 있어요.</div>`; return; }
     const hasDraft = ME && hasActiveDraft(ME.id, c);
     qa.innerHTML = `${s ? '<div class="notice">제출했어요. 선생님이 채점하기 전까지는 고쳐서 다시 낼 수 있어요.</div>' : ''}
-      <div class="sticky-foot"><button type="button" class="btn pri" id="go">✏️ ${c.kind === 'concept' ? '확인 문제' : '시험'} ${hasDraft ? '이어서 풀기' : (!s && RETAKE[c.id] ? `다시 풀기 (${RETAKE[c.id] + 1}차)` : '풀기')} (${n}문제)</button></div>`;
+      <div class="sticky-foot"><button type="button" class="btn pri" id="go">${ico('pen', 16)} ${c.kind === 'concept' ? '확인 문제' : '시험'} ${hasDraft ? '이어서 풀기' : (!s && RETAKE[c.id] ? `다시 풀기 (${RETAKE[c.id] + 1}차)` : '풀기')} (${n}문제)</button></div>`;
     $('#go').onclick = async () => {
       const goBtn = $('#go'); goBtn.disabled = true;
       let prev = null;
@@ -553,21 +553,21 @@ function quiz(c, prev, seq = VIEW_SEQ) {
 
   const draftMsgHTML = (state) => {
     if (state.type === 'error') {
-      return `<div class="draft-bar err" role="status" aria-live="polite"><span>⚠️ 이 기기에서는 임시저장이 되지 않아요(저장 공간 부족 또는 차단됨). 페이지를 나가지 말고 바로 제출해 주세요.</span></div>`;
+      return `<div class="draft-bar err" role="status" aria-live="polite"><span>${ico('warn', 15)} 이 기기에서는 임시저장이 되지 않아요(저장 공간 부족 또는 차단됨). 페이지를 나가지 말고 바로 제출해 주세요.</span></div>`;
     }
     if (state.type === 'restored') {
-      return `<div class="draft-bar" role="status" aria-live="polite"><span>💾 이전에 임시저장한 답안을 불러왔어요 (${fmtTime(state.savedAt)}). <b>임시저장은 제출이 아니에요!</b></span><div class="draft-actions"><button type="button" class="btn sm ghost" id="clearDraft">초안 지우기</button></div></div>`;
+      return `<div class="draft-bar" role="status" aria-live="polite"><span>${ico('save', 15)} 이전에 임시저장한 답안을 불러왔어요 (${fmtTime(state.savedAt)}). <b>임시저장은 제출이 아니에요!</b></span><div class="draft-actions"><button type="button" class="btn sm ghost" id="clearDraft">초안 지우기</button></div></div>`;
     }
     if (state.type === 'version-mismatch') {
-      return `<div class="draft-bar" role="status" aria-live="polite"><span>ℹ️ 시험 문항이 바뀌어 이전 임시저장 답안을 불러오지 않았어요.</span></div>`;
+      return `<div class="draft-bar" role="status" aria-live="polite"><span>${ico('info', 15)} 시험 문항이 바뀌어 이전 임시저장 답안을 불러오지 않았어요.</span></div>`;
     }
     if (state.type === 'saved') {
-      return `<div class="draft-bar" role="status" aria-live="polite"><span>💾 임시저장됨 (${fmtTime(state.savedAt)}) · 아직 제출하지 않았어요. 다 풀고 아래 <b>제출하기</b>를 꼭 눌러요.</span></div>`;
+      return `<div class="draft-bar" role="status" aria-live="polite"><span>${ico('save', 15)} 임시저장됨 (${fmtTime(state.savedAt)}) · 아직 제출하지 않았어요. 다 풀고 아래 <b>제출하기</b>를 꼭 눌러요.</span></div>`;
     }
-    return `<div class="draft-bar" role="status" aria-live="polite"><span>💾 입력한 답은 이 기기에 자동으로 임시저장돼요. <b>임시저장은 제출이 아니에요!</b></span></div>`;
+    return `<div class="draft-bar" role="status" aria-live="polite"><span>${ico('save', 15)} 입력한 답은 이 기기에 자동으로 임시저장돼요. <b>임시저장은 제출이 아니에요!</b></span></div>`;
   };
 
-  qa.innerHTML = `<h2 style="margin-top:28px">✏️ ${c.kind === 'concept' ? '확인 문제' : esc(c.title)}</h2>
+  qa.innerHTML = `<h2 style="margin-top:28px">${ico('pen', 22)} ${c.kind === 'concept' ? '확인 문제' : esc(c.title)}</h2>
     <div id="draftBar"></div>` +
     c.questions.map((q, i) => `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div><span class="qstate" id="qs${i}"></span></div>${mediaHTML(q)}<div class="ans"></div></div>`).join('') +
     `<div class="sticky-foot"><button type="button" class="btn pri" id="sub">제출하기</button></div>`;
@@ -678,7 +678,7 @@ function quiz(c, prev, seq = VIEW_SEQ) {
       label: '제출 전 확인',
       initialFocusSelector: hasIssues ? '#rvFix' : '#rvSend',
       html: `<div class="box" style="max-width:520px">
-        <h2 style="margin-top:0">📤 제출 전 확인</h2>
+        <h2 style="margin-top:0">${ico('send', 20)} 제출 전 확인</h2>
         <p style="margin:6px 0">전체 <b>${report.total}문제</b> 중 <b>${report.completeCount}문제</b>를 모두 채웠어요.</p>
         ${hasIssues ? `<div class="notice" style="margin:10px 0">
           ${report.empty.length ? `<div>• 아직 안 푼 문제: <b>${report.empty.length}개</b></div>` : ''}
@@ -686,7 +686,7 @@ function quiz(c, prev, seq = VIEW_SEQ) {
           <div class="small muted" style="margin-top:4px">아래 번호를 누르면 그 문제로 바로 이동해요.</div>
         </div>
         <div class="review-list">${issueChips}</div>` : '<p class="muted small">모든 문제를 다 풀었어요!</p>'}
-        ${c.locked ? '<div class="notice" style="margin:10px 0">⚠️ <b>이 시험은 한 번만 낼 수 있어요.</b> 제출하면 바꿀 수 없어요.</div>' : ''}
+        ${c.locked ? `<div class="notice" style="margin:10px 0">${ico('warn', 15)} <b>이 시험은 한 번만 낼 수 있어요.</b> 제출하면 바꿀 수 없어요.</div>` : ''}
         <div class="bar" style="justify-content:flex-end;margin-bottom:0">
           <button type="button" class="btn" id="rvFix">${hasIssues ? '돌아가서 고치기' : '취소'}</button>
           <button type="button" class="btn pri" id="rvSend">이대로 제출하기</button>
@@ -775,7 +775,8 @@ function renderInput(q, i, ans, el, onChange) {
 function showResult(c, sub, qa) {
   const fb = teacherNoteHTML(sub.feedback);
   const wrong = (sub.marks || []).map((m, i) => (m || c.questions[i].pending ? -1 : i)).filter((i) => i >= 0);
-  qa.innerHTML = `<div class="bar noprint" style="margin-top:24px"><h2 style="margin:0;flex:1">✅ 채점 결과: ${sub.score} / ${c.questions.length}</h2>${wrong.length ? `<button type="button" class="btn" id="retry">🔁 틀린 문제 다시 풀기 (${wrong.length}문제)</button> ` : ''}<button type="button" class="btn pri" id="prt">🖨 결과 출력하기</button></div>
+  const perfect = sub.score === c.questions.length;
+  qa.innerHTML = `<div class="bar noprint" style="margin-top:24px"><h2 style="margin:0;flex:1;display:flex;align-items:center">${perfect ? '<img class="illus illus-badge" src="/img/badge-celebrate.jpg" alt="">' : `${ico('check', 22)}&nbsp;`}채점 결과: ${sub.score} / ${c.questions.length}</h2>${wrong.length ? `<button type="button" class="btn" id="retry">${ico('retry', 15)} 틀린 문제 다시 풀기 (${wrong.length}문제)</button> ` : ''}<button type="button" class="btn pri" id="prt">${ico('print', 15)} 결과 출력하기</button></div>
     <div class="result">${resultHeadHTML(c, sub, ME)}${fb}${resultItemsHTML(c, sub, sub.correct)}</div>`;
   if (fb) setTimeout(() => { const n = qa.querySelector('.tnote'); if (n) n.classList.add('pop'); }, 50);
   qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
@@ -807,10 +808,10 @@ function retryQuiz(c, sub, left, qa, round = 1) {
     left.forEach((i) => { const m = qa.querySelector(`#q${i} .mark`); m.textContent = marks[i] ? '⭕' : '❌'; m.className = 'mark ' + (marks[i] ? 'ok' : 'no'); });
     const foot = qa.querySelector('.sticky-foot');
     if (!still.length) {
-      foot.innerHTML = `<div class="notice ok" style="margin:0">🎉 모두 맞혔어요! 잘했어요.</div> <button type="button" class="btn" id="rtEnd">← 결과로</button>`;
-      toast('🎉 모두 맞혔어요!');
+      foot.innerHTML = `<div class="notice ok" style="margin:0;display:inline-flex;align-items:center;gap:8px"><img class="illus illus-badge" src="/img/badge-celebrate.jpg" alt=""><span>모두 맞혔어요! 정말 잘했어요.</span></div> <button type="button" class="btn" id="rtEnd">← 결과로</button>`;
+      toast('모두 맞혔어요!');
     } else {
-      foot.innerHTML = `<span class="small" style="align-self:center">${left.length - still.length}문제 맞힘 · <b>${still.length}문제</b> 남음</span> <button type="button" class="btn pri" id="rtNext">🔁 남은 문제 다시 풀기</button> <button type="button" class="btn" id="rtEnd">← 결과로</button>`;
+      foot.innerHTML = `<span class="small" style="align-self:center">${left.length - still.length}문제 맞힘 · <b>${still.length}문제</b> 남음</span> <button type="button" class="btn pri" id="rtNext">${ico('retry', 15)} 남은 문제 다시 풀기</button> <button type="button" class="btn" id="rtEnd">← 결과로</button>`;
       $('#rtNext').onclick = () => retryQuiz(c, sub, still, qa, round + 1);
     }
     $('#rtEnd').onclick = () => concept(c.id);
@@ -823,7 +824,7 @@ async function allResults() {
   scrollTo(0, 0);
   const done = CONCEPTS.filter((c) => SUBS[c.id] && SUBS[c.id].status === 'graded');
   app.innerHTML = `<button type="button" class="btn sm noprint" id="back">← 목록</button>
-    <div class="bar noprint"><h2 style="margin:0;flex:1">📄 내 결과 모아 보기</h2>${done.length ? '<button type="button" class="btn pri" id="prt">🖨 모두 출력하기</button>' : ''}</div>
+    <div class="bar noprint"><h2 style="margin:0;flex:1">${ico('note', 22)} 내 결과 모아 보기</h2>${done.length ? `<button type="button" class="btn pri" id="prt">${ico('print', 15)} 모두 출력하기</button>` : ''}</div>
     <div id="all" class="result">${done.length ? '<p class="muted">불러오는 중…</p>' : '<div class="notice">아직 선생님이 채점을 마친 시험이 없어요.</div>'}</div>`;
   $('#back').onclick = home;
   if (!done.length) return;

@@ -470,6 +470,15 @@ html[data-theme="dark"] body.role-teacher .names .nm{background:#0f172a;color:#e
 html[data-theme="dark"] body.role-teacher .rvrow.rowf{background:#172554}
 
 /* 테마 설정 모달 */
+.ico{display:inline-block;vertical-align:-0.18em;flex-shrink:0}
+.illus{display:inline-block;object-fit:cover;border-radius:50%;border:2px solid var(--line);background:var(--card);box-shadow:var(--sh-sm);vertical-align:middle;flex-shrink:0}
+.illus-hero{width:92px;height:92px;margin:0 auto 10px;display:block}
+.illus-home{width:54px;height:54px;margin-right:10px}
+.illus-teacher{width:40px;height:40px;margin-right:8px;border-color:#F2A47F;background:#FFF4EC}
+.illus-badge{width:46px;height:46px;margin-right:8px}
+.home-hero{display:flex;align-items:center;gap:12px;margin:14px 0 4px}
+.home-hero h2{margin:0}
+.tnh{display:flex;align-items:center}
 .theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin:8px 0 16px}
 .theme-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px;border:2px solid var(--line);border-radius:14px;background:var(--card);text-align:left;transition:border-color .15s,transform .15s}
 .theme-card:hover{border-color:var(--acc);transform:translateY(-1px)}

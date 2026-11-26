@@ -5,6 +5,7 @@ const dir = new URL('../public/', import.meta.url);
 let bad = 0;
 const check = (name, code) => { try { new vm.Script(code, { filename: name }); console.log('ok ', name); } catch (e) { bad++; console.log('BAD', name, e.message); } };
 for (const f of readdirSync(dir)) {
+  if (!f.endsWith('.js') && !f.endsWith('.html')) continue;
   const src = readFileSync(new URL(f, dir), 'utf8');
   if (f.endsWith('.js')) check(f, src);
   if (f.endsWith('.html')) [...src.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].forEach((m, k) => check(`${f} <script #${k + 1}>`, m[1]));
