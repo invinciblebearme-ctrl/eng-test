@@ -230,3 +230,18 @@ test('로그인 폼에 label for 연결과 접근성 속성이 포함된다', ()
   assert.ok(appEl.innerHTML.includes('for="sid"'));
   assert.ok(appEl.innerHTML.includes('role="alert"'));
 });
+
+test('openAccessibleModal은 trapModal이 있으면 label과 함께 위임하고 닫기 시 release를 호출한다', () => {
+  const { ctx } = bootEnv();
+  let trapArgs = null;
+  let released = false;
+  ctx.trapModal = (el, opts) => {
+    trapArgs = { el, opts };
+    return { release() { released = true; } };
+  };
+  const modal = ctx.openAccessibleModal({ id: 'm1', label: '테스트 모달', html: '<div class="box"><button id="ok">확인</button></div>' });
+  assert.ok(trapArgs);
+  assert.equal(trapArgs.opts.label, '테스트 모달');
+  modal.close(true);
+  assert.equal(released, true);
+});

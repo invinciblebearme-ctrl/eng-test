@@ -342,6 +342,20 @@ button.lkqr:hover .zoomhint{opacity:1}
 #toasts .toast.error{background:var(--no);color:#fff}
 #toasts .toast.info{background:var(--ink);color:#fff}
 .tile.today{border:2px solid var(--acc);background:#fff9f5}
+.wrap.tight,.wrap:has(> #sysmsg):has(> #tabhelp){padding-top:8px;padding-bottom:0}
+.today{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:10px 0 14px}
+.today-tiles,.today.compact{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.today-tiles{margin-bottom:12px}
+.today.compact > b{grid-column:1/-1;font-size:15px}
+.today .tile{display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:default}
+.today .tile:hover{border-color:var(--line)}
+.today .tile b{font-size:24px;line-height:1.1}
+.today .tile.warn{background:var(--waitbg);border-color:#f0d58a}
+.today .tile.warn b{color:var(--wait)}
+.today .tile.done{background:var(--okbg);border-color:#a9dcbc}
+.today .tile.done b{color:var(--ok)}
+.today .tile .btn{margin-top:auto;align-self:flex-start}
+@media(max-width:700px){.today-tiles,.today.compact{grid-template-columns:repeat(2,1fr)}.today table.plain{display:block;overflow-x:auto;max-width:100%}}
 .tabhelp{font-size:14px;color:var(--muted);margin:6px 0 12px}
 .badge.ai{background:#efe6ff;color:#5b21b6}
 .badge.pub{background:var(--okbg);color:var(--ok)}

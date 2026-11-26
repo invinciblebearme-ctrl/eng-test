@@ -181,7 +181,7 @@ function fmtTime(iso) {
 }
 
 // ---------- 접근성 모달 헬퍼 ----------
-function openAccessibleModal({ id, html, initialFocusSelector, onMount }) {
+function openAccessibleModal({ id, label, html, initialFocusSelector, onMount }) {
   const m = document.createElement('div');
   m.className = 'modal';
   if (id) m.id = id;
@@ -212,10 +212,11 @@ function openAccessibleModal({ id, html, initialFocusSelector, onMount }) {
   };
 
   if (typeof trapModal === 'function') {
-    trap = trapModal(m, { onClose: () => close(true) });
+    trap = trapModal(m, { label, onClose: () => close(true) });
   } else {
     m.setAttribute('role', 'dialog');
     m.setAttribute('aria-modal', 'true');
+    if (label) m.setAttribute('aria-label', label);
     document.addEventListener('keydown', onKeyFallback);
     m.onclick = (e) => { if (e.target === m) close(true); };
   }
@@ -322,6 +323,7 @@ function showBookmarkHelp() {
   else how = `<p class="small muted" style="margin:0 0 6px">${mac ? '맥' : '웨일북 · 컴퓨터'}</p><p class="fav-key"><span class="k">${mac ? '⌘' : 'Ctrl'}</span> + <span class="k">D</span></p><p>키보드에서 <b>${mac ? '⌘(command)' : 'Ctrl'}</b> 키를 누른 채 <b>D</b>를 누르면<br>즐겨찾기 창이 열려요. <b>완료</b>(또는 <b>저장</b>)를 눌러요.</p><p class="small muted">${/Whale/i.test(ua) ? '웨일' : '브라우저'} 주소창 오른쪽의 ☆(별)을 눌러도 돼요.</p>`;
   openAccessibleModal({
     id: 'favModal',
+    label: '즐겨찾기 추가',
     initialFocusSelector: '#favOk',
     html: `<div class="box" style="max-width:520px;text-align:center">
       <h2 style="margin-top:0">⭐ 즐겨찾기 추가</h2>
@@ -651,6 +653,7 @@ function quiz(c, prev, seq = VIEW_SEQ) {
 
     openAccessibleModal({
       id: 'submitModal',
+      label: '제출 전 확인',
       initialFocusSelector: hasIssues ? '#rvFix' : '#rvSend',
       html: `<div class="box" style="max-width:520px">
         <h2 style="margin-top:0">📤 제출 전 확인</h2>
