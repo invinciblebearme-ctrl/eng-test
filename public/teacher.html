@@ -168,7 +168,7 @@ async function runAI(ids) {
 function aiRender() {
   const el = $('#aijob'); if (!el) return;
   const j = AIJOB;
-  if (j.running) el.innerHTML = `${ico('sparkle', 14)} AI 제안 ${j.done}/${j.total}${j.failed.length ? ` · 실패 ${j.failed.length}` : ''} <button class="btn sm ghost" id="aiStop" ${j.stop ? 'disabled' : ''}>${j.stop ? '멈추는 중…' : '${ico('pause', 12)} 중지'}</button>`;
+  if (j.running) el.innerHTML = `${ico('sparkle', 14)} AI 제안 ${j.done}/${j.total}${j.failed.length ? ` · 실패 ${j.failed.length}` : ''} <button class="btn sm ghost" id="aiStop" ${j.stop ? 'disabled' : ''}>${j.stop ? '멈추는 중…' : `${ico('pause', 12)} 중지`}</button>`;
   else if (j.queue.length || j.failed.length) el.innerHTML = `${ico('sparkle', 14)} ${j.note ? esc(j.note) + ' · ' : ''}${j.queue.length ? `남은 ${j.queue.length}건 <button class="btn sm" id="aiResume">${ico('play', 12)} 이어서</button>` : ''}${j.failed.length ? ` 실패 ${j.failed.length}건 <button class="btn sm" id="aiRetry" title="${esc(j.failed.slice(0, 5).map((f) => f.msg).join('\n'))}">↻ 실패만 다시</button>` : ''} <button class="btn sm ghost" id="aiClear" aria-label="AI 작업 알림 닫기">✕</button>`;
   else el.innerHTML = '';
   if ($('#aiStop')) $('#aiStop').onclick = () => { j.stop = true; aiRender(); };
