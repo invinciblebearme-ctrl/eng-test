@@ -8,11 +8,11 @@ let bad = 0, n = 0;
 const ok = (cond, msg, extra) => { n++; if (!cond) { bad++; console.log('BAD', msg, extra !== undefined ? JSON.stringify(extra).slice(0, 300) : ''); } else console.log('ok ', msg); };
 
 const env = { SUPABASE_URL: 'http://mock.local', SUPABASE_SERVICE_KEY: 'sb_secret_test', TEACHER_PASSWORD: 'pw-test', AI_API_URL: 'http://ai.local/v1', AI_API_KEY: 'k', AI_MODEL: 'm' };
-let mock; const tgSent = [];
+let mock; const tgSent = []; let OUT = 0;   // Worker가 보낸 바깥 요청 수 (Cloudflare 50개 제한 확인용)
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opt) => {
   const u = String(url);
-  if (/^http:\/\/mock\d*\.local/.test(u)) return mock.fetchLike(u, opt);
+  if (/^http:\/\/mock\d*\.local/.test(u)) { OUT++; return mock.fetchLike(u, opt); }
   if (u.startsWith('https://api.telegram.org/')) { tgSent.push({ url: u, body: JSON.parse(opt.body) }); return new Response('{"ok":true}'); }
   if (u.startsWith(env.AI_API_URL)) {   // 가짜 AI: "It's"로 시작하면 인정
     const j = JSON.parse(opt.body); const items = [...j.messages[1].content.matchAll(/### (\d+)번[\s\S]*?\[학생 답\] (.*)/g)];
@@ -116,6 +116,25 @@ ok(r.d.count === 1 && r.d.items[0].overrides[3] === false && r.d.items[0].rev ==
   const cr = await call('/api/t/confirm-all', { grade: 4, class: 1, concepts: [1], useDraft: true }, t2);
   const pt = mock.state.log.slice(b0).filter((x) => x.startsWith('PATCH'));
   ok(cr.d.count === 3 && cr.d.drafts === 2 && cr.d.conflicts === 0 && pt.length === 3 && mock.state.db.submissions.every((x) => x.status === 'graded') && mock.state.db.submissions[0].feedback === '초안0', '일괄 확정: 3건 확정 + 초안 2건 공개, 행마다 PATCH 1번, 충돌 0', { d: cr.d, pt });
+  mock = save; env.SUPABASE_URL = saveUrl;
+}
+
+// 일괄 확정을 많이(84건) 해도 요청 한 번의 바깥 요청이 50개를 넘지 않음 (Cloudflare 제한 → 예전엔 47건쯤에서 서버 오류)
+{
+  const save = mock, saveUrl = env.SUPABASE_URL; fresh(); const t2 = await T();
+  const g4 = CONCEPTS.filter((c) => c.grade === 4).slice(0, 7).map((c) => c.id);
+  const studs = mock.state.db.students.filter((x) => x.grade === 4);
+  for (const s of studs) { const t = await stuLogin(s.name, s.login_ids[0]); for (const c of g4) await call('/api/submit', { concept: c, answers: [] }, t); }
+  const subs = mock.state.db.submissions; subs.forEach((x, k) => { if (k % 3 === 0) x.rev = 5; if (k % 2 === 0) x.feedback_draft = '초안' + k; });
+  const total = subs.length; let calls = 0, maxOut = 0, sum = 0, drafts = 0, last;
+  do { OUT = 0; last = await call('/api/t/confirm-all', { grade: 4, useDraft: true }, t2); calls++; maxOut = Math.max(maxOut, OUT); sum += last.d.count || 0; drafts += last.d.drafts || 0; } while (last.status === 200 && last.d.more && calls < 20);
+  ok(total >= 60 && last.status === 200 && sum === total && drafts === Math.ceil(total / 2) && subs.every((x) => x.status === 'graded') && maxOut <= 45 && calls > 1, `일괄 확정 ${total}건: 요청 ${calls}번에 나눠 모두 확정, 한 번에 바깥 요청 최대 ${maxOut}개(≤45)`, { total, sum, drafts, calls, maxOut, st: last.status, d: last.d });
+  OUT = 0; const u = await call('/api/t/confirm-all', { grade: 4, undo: true }, t2);
+  ok(u.d.count === total && !u.d.more && OUT <= 10 && subs.every((x) => x.status === 'submitted'), `확정 취소 ${total}건: rev별로 묶어 한 번에 (바깥 요청 ${OUT}개)`, { d: u.d, OUT });
+  const ids = subs.map((x) => x.id);
+  ok((await call('/api/t/bulk-override', { ids, i: 0, value: true }, t2)).status === 400 && (await call('/api/t/review-commit', { items: ids.map((id) => ({ id })) }, t2)).status === 400, '묶음 O/X·검토 확정: 31건 이상은 서버 오류 대신 400(화면이 30건씩 나눠 보냄)');
+  OUT = 0; const b = await call('/api/t/bulk-override', { ids: ids.slice(0, 30), i: 0, value: true }, t2);
+  ok(b.d.count === 30 && OUT <= 45, `묶음 O/X 30건: 바깥 요청 ${OUT}개`);
   mock = save; env.SUPABASE_URL = saveUrl;
 }
 

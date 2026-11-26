@@ -90,6 +90,8 @@ const normIds = (v) => [...new Set((Array.isArray(v) ? v : String(v ?? '').split
 const cleanOverrides = (src) => { const o = {}; for (const [k, v] of Object.entries(src || {})) if (int(k) != null && int(k) >= 0 && int(k) < 40) o[int(k)] = !!v; return o; };
 // AI가 볼 문항: 선생님이 직접 정한 O/X(overrides)는 빼고
 const aiNeedOf = (s, c) => aiTargets(c, s.answers, marksOf(s)).filter((t) => !(s.overrides && s.overrides[t.i] != null)).length;
+// 한 요청에서 쓰기를 몇 번까지 할지 (Cloudflare 바깥 요청 50개 제한 아래로 여유 있게)
+const WRITE_BUDGET = 30;
 const chunks = (xs, n = 200) => { const out = []; for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n)); return out; };
 
 // 학생용 공개 세트 (정답·정리 없음) + 문항 수·내용 버전(임시저장 확인용)
@@ -478,13 +480,25 @@ export default {
           const now = new Date().toISOString(), st = body.undo ? { status: 'submitted', graded_at: null } : { status: 'graded', graded_at: now };
           // 한 행은 한 번만 고침: 초안을 공개할 행은 상태+피드백을 함께, 읽은 버전 그대로일 때만. 나머지는 상태만 (읽은 버전 조건)
           const withDraft = !body.undo && body.useDraft ? rows.filter((s) => s.feedback_draft && !s.feedback) : [];
-          let count = 0, drafts = 0, conflicts = 0;
-          for (const s of rows) {
-            const d = withDraft.includes(s);
-            try { await patchRev(env, s.id, s.rev, d ? { ...st, feedback: s.feedback_draft.slice(0, 500) } : st); count++; if (d) drafts++; }
-            catch (e) { if (e.status !== 409 && e.status !== 404) throw e; conflicts++; }
+          // Cloudflare는 요청 한 번에 바깥 요청을 50개까지만 허용 → 상태만 바꿀 행은 rev가 같은 것끼리 묶어 PATCH 한 번,
+          // 초안 공개 행은 한 행씩. 한 번에 WRITE_BUDGET 번까지만 보내고 남은 수는 more로 알림(화면이 이어서 다시 부름)
+          let count = 0, drafts = 0, conflicts = 0, budget = WRITE_BUDGET, more = 0;
+          const cond = `&status=eq.${body.undo ? 'graded' : 'submitted'}`;
+          const plain = rows.filter((s) => !withDraft.includes(s)), groups = new Map();
+          for (const s of plain) { const k = s.rev ?? 'x'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s.id); }
+          for (const [rev, ids] of groups) for (const part of chunks(ids, 100)) {
+            if (budget <= 0) { more += part.length; continue; }
+            budget--;
+            const done = await sb(env, `submissions?id=in.(${part.join(',')})${rev === 'x' ? '' : `&rev=eq.${rev}`}${cond}&select=id`, { method: 'PATCH', prefer: 'return=representation', body: st });
+            count += done.length; conflicts += part.length - done.length;
           }
-          return json({ count, byConcept, byClass, drafts, conflicts });
+          for (const s of withDraft) {
+            if (budget <= 0) { more++; continue; }
+            budget--;
+            try { await patchRev(env, s.id, s.rev, { ...st, feedback: s.feedback_draft.slice(0, 500) }); count++; drafts++; }
+            catch (e) { if (e.status !== 409 && e.status !== 404) throw e; conflicts++; budget--; }
+          }
+          return json({ count, byConcept, byClass, drafts, conflicts, more });
         }
         // ----- ✅ 검토·공개 -----
         // 목록: state = wait(채점 대기) | unpub(확정됐지만 피드백 미공개) | all
@@ -513,6 +527,7 @@ export default {
           await needV2(env);
           const ids = (body.ids || []).map(int).filter(Boolean), i = int(body.i), v = !!body.value, revs = body.revs || {};
           if (!ids.length || i == null || i < 0 || i >= 40) return fail('대상이 없어요');
+          if (ids.length > WRITE_BUDGET) return fail(`한 번에 ${WRITE_BUDGET}건까지예요. 나눠서 보내 주세요.`);
           const rows = (await Promise.all(chunks(ids).map((part) => sb(env, `submissions?select=id,auto,overrides,rev&id=in.(${part.join(',')})`)))).flat();
           const items = [], conflicts = [];
           for (const r of rows) {
@@ -529,6 +544,7 @@ export default {
           const items = Array.isArray(body.items) ? body.items : (body.ids || []).map((id) => ({ id }));
           const want = new Map(items.map((x) => [int(x.id), x]).filter(([id]) => id));
           if (!want.size) return json({ graded: 0, published: 0, conflicts: [], revs: {} });
+          if (want.size > WRITE_BUDGET) return fail(`한 번에 ${WRITE_BUDGET}건까지예요. 나눠서 보내 주세요.`);
           const now = new Date().toISOString();
           let graded = 0, published = 0; const conflicts = [], revs = {};
           for (const part of chunks([...want.keys()])) {
