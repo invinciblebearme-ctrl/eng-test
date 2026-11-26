@@ -175,8 +175,9 @@ function normRoster(classes) {
       const ids = s.login_ids != null ? normIds(s.login_ids) : null;
       by.set(number, { number, name, login_ids: ids && ids.length ? ids : null });   // ID 없으면 기존 ID는 그대로 둠
     }
-    const prev = out.find((x) => x.grade === g && x.class_no === c);
-    if (prev) for (const s of by.values()) prev.students.push(s); else if (by.size) out.push({ grade: g, class_no: c, students: [...by.values()] });
+    const prev = out.find((x) => x.grade === g && x.class_no === c);   // 같은 반이 두 번 오면 합치되 번호는 하나만 (뒤의 것)
+    if (prev) { const m = new Map(prev.students.map((x) => [x.number, x])); for (const s of by.values()) m.set(s.number, s); prev.students = [...m.values()]; }
+    else if (by.size) out.push({ grade: g, class_no: c, students: [...by.values()] });
   }
   return out;
 }

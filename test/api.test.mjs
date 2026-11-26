@@ -165,6 +165,9 @@ ok(r.d.archived_at === null && (await call('/api/login', { name: '가짜1반6', 
 const s7 = mock.state.db.students.find((s) => s.number === 7 && s.class_no === 1);
 ok((await call('/api/t/student-delete', { id: s7.id }, tk)).status === 200, '답 없는 학생은 삭제 가능');
 
+r = await call('/api/t/roster-preview', { classes: [{ grade: 4, class_no: 2, students: [{ number: 1, name: '가짜2반1' }] }, { grade: 4, class_no: 2, students: [{ number: 1, name: '가짜2반1' }, { number: 9, name: '새' }] }] }, tk);
+ok(r.d.classes.length === 1 && r.d.classes[0].total === 2 && r.d.classes[0].add.length === 1, '같은 반이 두 번 와도 번호는 하나만', r.d.classes);
+
 // ---------- 오늘 할 일 ----------
 r = await call('/api/t/today?grade=4', null, tk);
 const c1 = r.d.classes.find((c) => c.class_no === 1);

@@ -28,8 +28,62 @@ function statusMsg(el, text, kind = 'info') {
   el.textContent = text || '';
 }
 
+// ---------- 저장 줄 세우기: 한 대상(카드·행)의 저장 요청을 차례로 하나씩 ----------
+// q = saveQueue(send(patch) → Promise, onChange(q)).  q.stage(patch, 지연ms) 로 변경을 쌓고, q.flush()로 바로 보냄.
+// 보내는 동안 쌓인 변경은 같은 펌프가 이어서 보냄(재귀·자기 기다림 없음). 실패하면 변경을 보존하고 state='error'.
+// 409(다른 곳에서 바뀜)면 conflict=true가 되어 더 보내지 않음 → 새로 불러와야 함.
+// q.state: 'saved' | 'dirty'(쌓임) | 'saving' | 'error'.  q.done: 지금 펌프가 끝나면 풀리는 Promise
+function saveQueue(send, onChange = () => {}) {
+  const q = {
+    pending: null, state: 'saved', err: '', conflict: false, timer: null, touched: false, running: false, done: Promise.resolve(),
+    stage(patch, delay = 0) {
+      q.pending = { ...(q.pending || {}), ...patch }; q.touched = true;
+      if (!q.running && q.state !== 'error') q.state = 'dirty';
+      clearTimeout(q.timer); q.timer = null;
+      if (delay) { q.timer = setTimeout(() => q.flush(), delay); onChange(q); return q.done; }
+      return q.flush();
+    },
+    flush() {
+      clearTimeout(q.timer); q.timer = null;
+      if (q.running || q.conflict || !q.pending) return q.done;   // 돌고 있는 펌프가 남은 것까지 보냄
+      q.running = true;
+      q.done = (async () => {
+        try {
+          while (q.pending && !q.conflict) {
+            const patch = q.pending; q.pending = null; q.state = 'saving'; onChange(q);
+            try { await send(patch); q.err = ''; }
+            catch (e) { q.pending = { ...patch, ...(q.pending || {}) }; q.state = 'error'; q.err = e.message || String(e); q.conflict = e.status === 409; return; }
+            q.state = q.pending ? 'saving' : 'saved';
+          }
+        } finally { q.running = false; onChange(q); }
+      })();
+      return q.done;
+    },
+    reset() { clearTimeout(q.timer); Object.assign(q, { pending: null, state: 'saved', err: '', conflict: false, timer: null }); onChange(q); },
+  };
+  return q;
+}
+
 // ---------- 창(모달) 접근성: role=dialog, 초점 가두기, Esc·배경 눌러 닫기, 닫으면 초점 되돌리기 ----------
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"]),audio[controls]';
+// 다시 그린 뒤 같은 칸·버튼으로 초점을 돌려놓기: key = focusKey(el) → 그린 뒤 restoreFocus(root, key)
+function focusKey(el) {
+  if (!el || el === document.body || !el.tagName) return null;
+  if (el.id) return { sel: '#' + CSS.escape(el.id), s: el.selectionStart, e: el.selectionEnd };
+  const ds = Object.entries(el.dataset || {}); if (!ds.length) return null;
+  const own = el.tagName.toLowerCase() + ds.map(([k, v]) => `[data-${k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}="${CSS.escape(v)}"]`).join('');
+  const card = el.parentElement && el.parentElement.closest('[data-id],[data-k]');
+  const pre = card ? (card.dataset.id != null ? `[data-id="${CSS.escape(card.dataset.id)}"] ` : `[data-k="${CSS.escape(card.dataset.k)}"] `) : '';
+  return { sel: pre + own, s: el.selectionStart, e: el.selectionEnd };
+}
+function restoreFocus(root, key) {
+  if (!key || !root) return false;
+  let el = null; try { el = root.querySelector(key.sel); } catch {}
+  if (!el) return false;
+  el.focus({ preventScroll: true });
+  if (key.s != null && typeof el.setSelectionRange === 'function') try { el.setSelectionRange(key.s, key.e); } catch {}
+  return true;
+}
 // 이미 그려진 창(container 안의 .modal > .box)에 접근성을 입힘. 안의 내용을 다시 그려도 유지됨.
 // opts: { label, onClose(), canClose() → false면 안 닫음 }. 돌려줌: { release(), tryClose() }
 function trapModal(container, opts = {}) {
@@ -39,8 +93,10 @@ function trapModal(container, opts = {}) {
     const b = box(); if (!b) return;
     b.setAttribute('role', 'dialog'); b.setAttribute('aria-modal', 'true'); if (!b.hasAttribute('tabindex')) b.setAttribute('tabindex', '-1');
     if (opts.label) b.setAttribute('aria-label', opts.label);
-    if (!b.contains(document.activeElement)) { const f = b.querySelector('[autofocus]') || b.querySelector(FOCUSABLE); (f || b).focus({ preventScroll: true }); }
+    if (!b.contains(document.activeElement) && !restoreFocus(b, last)) { const f = b.querySelector('[autofocus]') || b.querySelector(FOCUSABLE); (f || b).focus({ preventScroll: true }); }
   };
+  let last = null;
+  const onFocus = (e) => { last = focusKey(e.target) || last; };
   const tryClose = () => { if (opts.canClose && opts.canClose() === false) return false; if (opts.onClose) opts.onClose(); return true; };
   const onKey = (e) => {
     const b = box(); if (!b) return;
@@ -55,13 +111,13 @@ function trapModal(container, opts = {}) {
   };
   const onClick = (e) => { if (e.target.classList && e.target.classList.contains('modal')) tryClose(); };
   const mo = new MutationObserver(dress);
-  document.addEventListener('keydown', onKey, true); container.addEventListener('click', onClick);
-  mo.observe(container, { childList: true, subtree: false });
+  document.addEventListener('keydown', onKey, true); container.addEventListener('click', onClick); container.addEventListener('focusin', onFocus);
+  mo.observe(container, { childList: true, subtree: true });
   dress();
   return {
     tryClose,
     release() {
-      document.removeEventListener('keydown', onKey, true); container.removeEventListener('click', onClick); mo.disconnect();
+      document.removeEventListener('keydown', onKey, true); container.removeEventListener('click', onClick); container.removeEventListener('focusin', onFocus); mo.disconnect();
       if (prev && prev.isConnected && typeof prev.focus === 'function') prev.focus({ preventScroll: true });
     },
   };

@@ -8,8 +8,10 @@
 </head>
 <body>
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
-  <div class="tabs" id="nav" hidden><button class="tab on" data-v="grades">채점·성적</button><button class="tab" data-v="roster">명렬표</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="review">✅ 검토·공개</button><button class="tab" data-v="reports">📊 분석</button></div>
+  <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades">📋 채점·성적</button><button class="tab" data-v="review">✅ 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports">📊 분석</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
+  <span id="aijob" class="small" role="status" aria-live="polite"></span>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
+<div class="wrap tight"><div id="sysmsg"></div><p class="tabhelp small muted" id="tabhelp"></p></div>
 <main class="wrap" id="app"></main>
 <div id="modal"></div>
 <div id="printArea" class="result"></div>
@@ -22,9 +24,9 @@ let GRADE = +(localStorage.getItem('eng4-grade') || 4), CLASS_COUNT = { 3: 7, 4:
 let TOKEN = localStorage.getItem(LS), KEY = null, CLS = +(localStorage.getItem('eng4-cls') || 1), VIEW = 'grades', timer = null;
 const T = (path, body) => api(path, body, TOKEN).catch((e) => { if (e.status === 401) { logout(); } throw e; });
 
-function logout() { localStorage.removeItem(LS); TOKEN = null; $('#nav').hidden = true; $('#out').hidden = true; login(); }
-$('#out').onclick = logout;
-$('#nav').onclick = (e) => { const v = e.target.dataset.v; if (v) go(v); };
+function logout() { localStorage.removeItem(LS); TOKEN = null; RV.data = null; $('#nav').hidden = true; $('#out').hidden = true; $('#tabhelp').textContent = ''; login(); }
+$('#out').onclick = async () => { if (await leaveOK()) logout(); };
+$('#nav').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) go(b.dataset.v); };
 
 function login(msg) {
   app.innerHTML = `<div class="center-screen"><h2>교사 로그인</h2><p class="lead">3·4학년 2학기 영어 채점</p>
@@ -44,37 +46,168 @@ async function boot() {
     try { for (const v of Object.values((await T('/api/t/roster-check')).classes)) CLASS_COUNT[v.grade] = Math.max(CLASS_COUNT[v.grade] || 0, v.class_no); } catch {} } catch (e) { if (e.status !== 401) app.innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
   await loadClosed();
   $('#nav').hidden = false; $('#out').hidden = false; go('grades');
+  // DB 업그레이드 확인 (안 됐으면 저장 기능이 멈추므로 위에 계속 알림)
+  T('/api/t/schema').then((r) => { $('#sysmsg').innerHTML = r.ok ? '' : `<div class="notice" role="alert">⚠️ ${esc(r.message)}</div>`; }).catch(() => {});
 }
-// ---------------- ✅ 검토·공개: 틀린 문제와 AI 피드백을 한눈에 보고 확정·공개 ----------------
-const RV = { cls: null, set: 'all', state: localStorage.getItem('eng4-rvstate') || 'wait', mode: localStorage.getItem('eng4-rvmode') || 'group', data: null, sel: new Set(), focus: 0, row: 0 };
+// ---------------- 떠나기 전 확인: 저장 안 된 검토 변경 · 열린 상세 창 · AI 일괄 작업 ----------------
+let MODAL_DIRTY = null;   // 열린 상세 창이 고친 게 있는지 알려 주는 함수
+async function leaveOK() {
+  if (MODAL_DIRTY && MODAL_DIRTY() && !confirm('채점 창에 저장하지 않은 변경이 있어요. 버리고 이동할까요?')) return false;
+  if (RV.data) {
+    await rvFlushAll(RV.data);
+    const n = rvUnsaved(RV.data).length;
+    if (n && !confirm(`검토·공개에 저장되지 않은 변경이 ${n}건 있어요 (저장 실패).\n이동하면 이 변경은 사라져요. 그래도 이동할까요?`)) return false;
+  }
+  return true;
+}
+addEventListener('beforeunload', (e) => {
+  if ((RV.data && rvUnsaved(RV.data).length) || AIJOB.running || (MODAL_DIRTY && MODAL_DIRTY())) { e.preventDefault(); e.returnValue = ''; }
+});
+// 창(모달) 틀: 초점 가두기·Esc·배경 클릭 (common.js trapModal). canClose가 false면 안 닫힘
+function shell(label, canClose, onClosed) {
+  const m = $('#modal'); if (m._sh) m._sh.close();
+  const t = trapModal(m, { label, canClose, onClose: () => sh.close() });
+  const sh = { m, tryClose: () => t.tryClose(), close() { if (m._sh !== sh) return; m._sh = null; t.release(); m.innerHTML = ''; MODAL_DIRTY = null; if (onClosed) onClosed(); } };
+  m._sh = sh; return sh;
+}
+// ---------------- 🤖 AI 일괄 작업: 메뉴를 옮겨도 계속, 한 번에 하나, 중지·이어서·실패만 다시 ----------------
+const AIJOB = { running: false, stop: false, queue: [], total: 0, done: 0, ok: 0, failed: [], note: '' };
+async function runAI(ids) {
+  if (AIJOB.running) return toast('이미 AI 채점 중이에요', 'error');
+  Object.assign(AIJOB, { running: true, stop: false, queue: [...new Set(ids)], total: new Set(ids).size, done: 0, ok: 0, failed: [], note: '' });
+  aiRender();
+  while (AIJOB.queue.length && !AIJOB.stop) {
+    const id = AIJOB.queue[0];
+    try { await T('/api/t/ai-grade', { id }); AIJOB.ok++; }
+    catch (e) { AIJOB.failed.push({ id, msg: e.message }); if (e.status === 503 || e.status === 401) { AIJOB.stop = true; AIJOB.note = e.message; } }
+    AIJOB.queue.shift(); AIJOB.done++; aiRender();
+  }
+  AIJOB.running = false; aiRender();
+  toast(`🤖 AI 제안 ${AIJOB.ok}건 완료${AIJOB.failed.length ? ` · 실패 ${AIJOB.failed.length}건` : ''}${AIJOB.queue.length ? ` · 남은 ${AIJOB.queue.length}건 (중지됨)` : ''}`, AIJOB.failed.length ? 'error' : 'ok');
+  if (VIEW === 'grades' && !$('#modal').innerHTML) drawGrades(true);
+}
+function aiRender() {
+  const el = $('#aijob'); if (!el) return;
+  const j = AIJOB;
+  if (j.running) el.innerHTML = `🤖 AI 제안 ${j.done}/${j.total}${j.failed.length ? ` · 실패 ${j.failed.length}` : ''} <button class="btn sm ghost" id="aiStop" ${j.stop ? 'disabled' : ''}>${j.stop ? '멈추는 중…' : '⏸ 중지'}</button>`;
+  else if (j.queue.length || j.failed.length) el.innerHTML = `🤖 ${j.note ? esc(j.note) + ' · ' : ''}${j.queue.length ? `남은 ${j.queue.length}건 <button class="btn sm" id="aiResume">▶ 이어서</button>` : ''}${j.failed.length ? ` 실패 ${j.failed.length}건 <button class="btn sm" id="aiRetry" title="${esc(j.failed.slice(0, 5).map((f) => f.msg).join('\n'))}">↻ 실패만 다시</button>` : ''} <button class="btn sm ghost" id="aiClear" aria-label="AI 작업 알림 닫기">✕</button>`;
+  else el.innerHTML = '';
+  if ($('#aiStop')) $('#aiStop').onclick = () => { j.stop = true; aiRender(); };
+  if ($('#aiResume')) $('#aiResume').onclick = () => runAI(j.queue);
+  if ($('#aiRetry')) $('#aiRetry').onclick = () => runAI(j.failed.map((f) => f.id));
+  if ($('#aiClear')) $('#aiClear').onclick = () => { j.queue = []; j.failed = []; j.note = ''; aiRender(); };
+  const b = $('#aiAll'); if (b) b.disabled = j.running || b.dataset.off === '1';
+}
+// ---------------- 📋 오늘 할 일 (학년 전체 반) ----------------
+let TODAY = null;
+async function loadToday() {
+  try { TODAY = (await T('/api/t/today?grade=' + GRADE)).classes; } catch { TODAY = null; }
+  const w = TODAY ? TODAY.reduce((a, c) => a + c.wait, 0) : 0;
+  const nb = $('#navWait'); if (nb) { nb.hidden = !w; nb.textContent = w; nb.title = `채점 대기 ${w}건`; }
+  return TODAY;
+}
+function todayHTML(onlyCls) {
+  if (!TODAY) return '';
+  const rows = onlyCls ? TODAY.filter((c) => c.class_no === onlyCls) : TODAY;
+  if (!rows.length) return '';
+  const sum = (k) => rows.reduce((a, c) => a + c[k], 0);
+  const tile = (k, icon, label, act, hint) => `<div class="tile ${sum(k) ? 'warn' : 'done'}"><b>${sum(k)}</b><span>${icon} ${label}</span>${sum(k) && act ? `<button class="btn sm" data-tgo="${act}:${onlyCls || 0}">${hint}</button>` : '<span class="small muted">없음</span>'}</div>`;
+  if (onlyCls) return `<div class="today compact" role="region" aria-label="오늘 할 일"><b>📋 오늘 할 일 · ${GRADE}학년 ${onlyCls}반</b>
+    ${tile('wait', '⏳', '채점 대기', 'wait', '✅ 검토·공개에서 처리 →')}${tile('aiSuggest', '🤖', 'AI 제안 미검토', 'wait', '검토하기 →')}${tile('unpub', '💬', '피드백 미공개', 'unpub', '공개하기 →')}
+    <div class="tile ${sum('missing') ? 'warn' : 'done'}"><b>${sum('missing')}</b><span>📭 미제출 칸</span><span class="small muted">열린 시험 ${rows[0].openSets}개 기준 · 아래 표의 · 칸</span></div></div>`;
+  return `<section class="today" role="region" aria-label="오늘 할 일"><h3 style="margin:0 0 8px">📋 오늘 할 일 · ${GRADE}학년 전체</h3>
+    <div class="today-tiles">${tile('wait', '⏳', '채점 대기', 'wait', '지금 보기')}${tile('aiSuggest', '🤖', 'AI 제안 미검토', 'wait', '지금 보기')}${tile('unpub', '💬', '피드백 미공개', 'unpub', '지금 보기')}<div class="tile ${sum('missing') ? 'warn' : 'done'}"><b>${sum('missing')}</b><span>📭 미제출 칸</span><span class="small muted">열린 시험 기준</span></div></div>
+    <table class="plain small"><tr><th>반</th><th>채점 대기</th><th>AI 제안</th><th>피드백 미공개</th><th>미제출 칸</th></tr>${rows.map((c) => `<tr><td><b>${c.class_no}반</b> <span class="muted">${c.students}명</span></td>
+      <td>${c.wait ? `<button class="linkbtn" data-tgo="wait:${c.class_no}">${c.wait}건</button>` : '0'}</td><td>${c.aiSuggest || 0}</td>
+      <td>${c.unpub ? `<button class="linkbtn" data-tgo="unpub:${c.class_no}">${c.unpub}건</button>` : '0'}</td>
+      <td>${c.missing ? `<button class="linkbtn" data-tgo="miss:${c.class_no}" title="성적표에서 보기">${c.missing}칸</button>` : '0'}</td></tr>`).join('')}</table></section>`;
+}
+function bindToday(root) {
+  root.querySelectorAll('[data-tgo]').forEach((b) => (b.onclick = async () => {
+    const [k, c] = b.dataset.tgo.split(':'), cls = +c;
+    if (k === 'miss') { CLS = cls; localStorage.setItem('eng4-cls', CLS); return go('grades'); }
+    if (VIEW === 'review' && !(await leaveOK())) return;
+    RV.cls = cls; RV.state = k; RV.set = 'all'; localStorage.setItem('eng4-rvstate', k); RV.sel.clear();
+    if (VIEW === 'review') { RV.data = null; reviewView(); } else go('review');
+  }));
+}
+// ---------------- ✅ 검토·공개 (작업함): 틀린 문제와 AI 피드백을 한눈에 보고 확정·공개 ----------------
+// 저장 방식: O/X·검토함은 누르면 바로, 피드백 초안은 입력을 멈추고 0.7초 뒤 저장. 카드마다 요청을 차례로 보내고(rev로 역전 방지)
+// 저장 중·실패한 카드가 있으면 확정·공개·이동을 막거나 묻습니다.
+const RV = { cls: null, set: 'all', state: localStorage.getItem('eng4-rvstate') || 'wait', mode: localStorage.getItem('eng4-rvmode') || 'group', data: null, sel: new Set(), focus: 0, row: 0, busy: false };
 const normAns = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+const rvMarksOf = (r) => r.c.questions.map((_, i) => (r.overrides && r.overrides[i] != null ? !!r.overrides[i] : !!r.auto[i]));
+// 카드마다 저장 줄(common.js saveQueue). 보낼 때의 r.rev를 쓰므로 앞 저장이 끝난 뒤 새 rev로 다음 저장
+const rvSv = (r) => r._sv || (r._sv = saveQueue(async (patch) => {
+  const d = await T('/api/t/review-save', { id: r.id, rev: r.rev, ...patch });
+  if (d.rev != null) r.rev = d.rev;
+  if ('overrides' in patch) r._srv.overrides = { ...patch.overrides };
+  if ('feedback_draft' in patch) r._srv.feedback_draft = patch.feedback_draft;
+  if ('reviewed' in patch) { r.reviewed_at = d.reviewed_at || null; r._srv.reviewed_at = r.reviewed_at; }
+}, () => rvTag(r)));
+const rvUnsaved = (items) => items.filter((r) => r._sv && r._sv.state !== 'saved');
+const rvQueue = (r, patch, delay = 0) => rvSv(r).stage(patch, delay);
+const rvFlush = (r) => rvSv(r).flush();
+async function rvFlushAll(items) { await Promise.all(items.filter((r) => r._sv).map((r) => r._sv.flush())); }
+function rvRevert(r) {
+  if (r._sv && r._sv.running) return toast('저장 중이에요. 잠시 뒤 다시 눌러 주세요');
+  r.overrides = { ...r._srv.overrides }; r.feedback_draft = r._srv.feedback_draft; r.reviewed_at = r._srv.reviewed_at; r.marks = rvMarksOf(r);
+  rvSv(r).reset();
+  drawReview();
+}
+function rvSvHTML(r) {
+  const sv = r._sv; if (!sv || !sv.touched) return '';
+  if (sv.state === 'saved') return '<span class="st st-saved">✓ 저장됨</span>';
+  if (sv.state === 'dirty') return '<span class="st st-saving">✎ 저장 대기…</span>';
+  if (sv.state === 'saving') return '<span class="st st-saving">저장 중…</span>';
+  return `<span class="st st-error" role="alert">⚠️ 저장 실패: ${esc(sv.err)}</span> ${sv.conflict ? `<button class="btn sm" data-reload="${r.id}">↻ 새로 불러오기</button>` : `<button class="btn sm" data-retry="${r.id}">다시 저장</button> <button class="btn sm ghost" data-revert="${r.id}">되돌리기</button>`}`;
+}
+function rvTag(r) {
+  const box = document.querySelector(`[data-svbox="${r.id}"]`); if (box) box.innerHTML = rvSvHTML(r);
+  const card = document.querySelector(`.rvc[data-id="${r.id}"]`); if (card) card.classList.toggle('rvfail', !!(r._sv && r._sv.state === 'error'));
+  rvHead();
+}
+// 머리줄: 저장 안 된 카드 수, 확정 버튼 막기
+function rvHead() {
+  if (!RV.data) return;
+  const un = rvUnsaved(RV.data), err = un.filter((r) => r._sv.state === 'error');
+  const el = $('#rvUnsaved');
+  if (el) el.innerHTML = err.length ? `<span class="st st-error" role="alert">⚠️ 저장 실패 ${err.length}건</span> <button class="btn sm" id="rvRetryAll">모두 다시 저장</button>` : un.length ? `<span class="st st-saving">저장 중 ${un.length}건…</span>` : '';
+  if ($('#rvRetryAll')) $('#rvRetryAll').onclick = () => err.filter((r) => !r._sv.conflict).forEach((r) => rvFlush(r));
+  const selUn = un.filter((r) => RV.sel.has(r.id)).length;
+  ['rvGo', 'rvPub'].forEach((id) => { const b = $('#' + id); if (!b) return; if (selUn) { b.disabled = true; b.title = '저장되지 않은 카드가 있어요. 저장이 끝나야 확정·공개할 수 있어요'; } else { b.disabled = b.dataset.off === '1'; b.title = ''; } });
+}
 async function reviewView() {
   if (RV.cls == null) RV.cls = CLS;
   const sets = KG();
-  app.innerHTML = `<div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs"><button class="tab ${RV.cls === 0 ? 'on' : ''}" data-rcls="0">전체 반</button>${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === RV.cls ? 'on' : ''}" data-rcls="${n}">${n}반</button>`).join('')}</div></div>
+  app.innerHTML = `<div id="todayBox"></div><div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs"><button class="tab ${RV.cls === 0 ? 'on' : ''}" data-rcls="0">전체 반</button>${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === RV.cls ? 'on' : ''}" data-rcls="${n}">${n}반</button>`).join('')}</div></div>
     <div class="bar view" style="flex-wrap:wrap;gap:8px">
-      <select id="rvSet" class="field"><option value="all">모든 시험</option><option value="concept" ${RV.set === 'concept' ? 'selected' : ''}>📘 기본 개념 전체</option>${sets.map((c) => `<option value="${c.id}" ${String(RV.set) === String(c.id) ? 'selected' : ''}>${esc(setTitle(c))}</option>`).join('')}</select>
-      <div class="tabs seg">${[['wait', '채점 대기'], ['unpub', '확정·피드백 미공개'], ['all', '전체']].map(([k, t]) => `<button class="tab ${RV.state === k ? 'on' : ''}" data-rst="${k}">${t}</button>`).join('')}</div>
+      <label class="sr-only" for="rvSet">시험</label><select id="rvSet" class="field"><option value="all">모든 시험</option><option value="concept" ${RV.set === 'concept' ? 'selected' : ''}>📘 기본 개념 전체</option>${sets.map((c) => `<option value="${c.id}" ${String(RV.set) === String(c.id) ? 'selected' : ''}>${esc(setTitle(c))}</option>`).join('')}</select>
+      <div class="tabs seg">${[['wait', '⏳ 채점 대기'], ['unpub', '💬 확정·피드백 미공개'], ['all', '전체']].map(([k, t]) => `<button class="tab ${RV.state === k ? 'on' : ''}" data-rst="${k}">${t}</button>`).join('')}</div>
       <span style="flex:1"></span>
       <div class="tabs seg">${[['group', '🧩 문항별 묶음'], ['card', '🧑‍🎓 학생별 카드']].map(([k, t]) => `<button class="tab ${RV.mode === k ? 'on' : ''}" data-rmode="${k}">${t}</button>`).join('')}</div>
     </div>
     <div id="rvBody"><p class="muted">불러오는 중…</p></div>`;
-  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); RV.set = 'all'; RV.sel.clear(); reviewView(); }));
-  app.querySelectorAll('[data-rcls]').forEach((b) => (b.onclick = () => { RV.cls = +b.dataset.rcls; RV.sel.clear(); reviewView(); }));
-  app.querySelectorAll('[data-rst]').forEach((b) => (b.onclick = () => { RV.state = b.dataset.rst; localStorage.setItem('eng4-rvstate', RV.state); RV.sel.clear(); reviewView(); }));
+  // 범위를 바꾸면 다시 불러오므로 저장 안 된 것부터 확인
+  const reload = (fn) => async () => { if (!(await leaveOK())) return; fn(); RV.sel.clear(); RV.data = null; reviewView(); };
+  app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = reload(() => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); RV.set = 'all'; })));
+  app.querySelectorAll('[data-rcls]').forEach((b) => (b.onclick = reload(() => { RV.cls = +b.dataset.rcls; })));
+  app.querySelectorAll('[data-rst]').forEach((b) => (b.onclick = reload(() => { RV.state = b.dataset.rst; localStorage.setItem('eng4-rvstate', RV.state); })));
   app.querySelectorAll('[data-rmode]').forEach((b) => (b.onclick = () => { RV.mode = b.dataset.rmode; localStorage.setItem('eng4-rvmode', RV.mode); RV.focus = 0; drawReview(); }));
-  $('#rvSet').onchange = () => { RV.set = $('#rvSet').value; RV.sel.clear(); reviewView(); };
+  $('#rvSet').onchange = async () => { const v = $('#rvSet').value; if (!(await leaveOK())) { $('#rvSet').value = RV.set; return; } RV.set = v; RV.sel.clear(); RV.data = null; reviewView(); };
   const ids = RV.set === 'all' ? [] : RV.set === 'concept' ? sets.filter((c) => c.kind === 'concept').map((c) => c.id) : [+RV.set];
   const my = ++DRAW_SEQ;
-  let d; try { d = await T(`/api/t/review?grade=${GRADE}&class=${RV.cls || ''}&state=${RV.state}&concepts=${ids.join(',')}`); } catch (e) { $('#rvBody').innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  loadToday().then(() => { if (VIEW === 'review' && $('#todayBox')) { $('#todayBox').innerHTML = todayHTML(); bindToday($('#todayBox')); } });
+  let d; try { d = await T(`/api/t/review?grade=${GRADE}&class=${RV.cls || ''}&state=${RV.state}&concepts=${ids.join(',')}`); } catch (e) { $('#rvBody').innerHTML = `<div class="notice" role="alert">${esc(e.message)}</div>`; return; }
   if (my !== DRAW_SEQ || VIEW !== 'review') return;
   const stBy = Object.fromEntries(d.students.map((x) => [x.id, x]));
   const order = Object.fromEntries(sets.map((c, k) => [c.id, k]));
   RV.data = d.items.map((r) => {
     const c = KEY.find((x) => x.id === r.concept), st = stBy[r.student_id];
-    const marks = c.questions.map((_, i) => (r.overrides && r.overrides[i] != null ? !!r.overrides[i] : !!r.auto[i]));
-    const wrong = c.questions.map((qq, i) => ((!r.auto[i] || !marks[i]) && qq.a != null ? i : -1)).filter((i) => i >= 0);
-    return { ...r, c, st, marks, wrong };
+    const x = { ...r, c, st, overrides: { ...(r.overrides || {}) }, _srv: { overrides: { ...(r.overrides || {}) }, feedback_draft: r.feedback_draft, reviewed_at: r.reviewed_at } };
+    x.marks = rvMarksOf(x);
+    x.wrong = c.questions.map((qq, i) => ((!r.auto[i] || !x.marks[i]) && qq.a != null ? i : -1)).filter((i) => i >= 0);
+    return x;
   }).filter((r) => r.st).sort((a, b) => a.st.class_no - b.st.class_no || a.st.number - b.st.number || order[a.concept] - order[b.concept]);
   drawReview();
 }
@@ -90,13 +223,16 @@ function rvGroups() {
   const order = Object.fromEntries(KG().map((c, k) => [c.id, k]));
   return [...m.values()].sort((a, b) => order[a.c.id] - order[b.c.id] || a.i - b.i || b.items.length - a.items.length);
 }
+// 카드의 상태 표시: 채점(대기/확정) · AI 제안 · 선생님 검토 · 공개
+const rvBadges = (r) => `<span class="badge ${r.status === 'graded' ? 'ok' : 'wait'}">${r.status === 'graded' ? '확정됨' : '채점 대기'}</span>${r.ai ? ' <span class="badge ai" title="AI가 O/X를 제안했어요 (선생님 확인 전)">🤖 AI 제안</span>' : ''}${r.reviewed_at ? ' <span class="badge ok">✓ 검토함</span>' : ''}${r.feedback ? ' <span class="badge pub">📣 피드백 공개됨</span>' : r.feedback_draft ? ' <span class="badge">💬 초안 (미공개)</span>' : ''}${rvWarn(r) ? ' <span class="badge no">⚠️ 피드백 확인 필요</span>' : ''}`;
 function drawReview() {
   const el = $('#rvBody'); if (!el || !RV.data) return;
+  const fk = el.contains(document.activeElement) ? focusKey(document.activeElement) : null;
   const items = RV.data, rev = items.filter((r) => r.reviewed_at).length;
-  const head = `<div class="rvhead"><b>${items.length}건</b> <span class="muted small">· 틀린 문항 ${items.reduce((a, r) => a + r.wrong.length, 0)}개 · 💬 초안 ${items.filter((r) => r.feedback_draft && !r.feedback).length}건 · 검토함 ${rev}/${items.length}</span><div class="rvprog"><i style="width:${items.length ? Math.round(rev / items.length * 100) : 0}%"></i></div></div>`;
+  const head = `<div class="rvhead"><b>${items.length}건</b> <span class="muted small">· 틀린 문항 ${items.reduce((a, r) => a + r.wrong.length, 0)}개 · 💬 초안 ${items.filter((r) => r.feedback_draft && !r.feedback).length}건 · 검토함 ${rev}/${items.length}</span> <span id="rvUnsaved" aria-live="polite"></span><div class="rvprog" role="progressbar" aria-label="검토 진행" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${rev}"><i style="width:${items.length ? Math.round(rev / items.length * 100) : 0}%"></i></div></div>`;
   const keys = RV.mode === 'group' ? 'J/K 묶음 이동 · O/X 이 묶음 전체 채점' : 'J/K 카드 이동 · ↑/↓ 문항 · O/X 채점 · Space 선택 · E 피드백 고치기 · R 검토함';
   let body;
-  if (!items.length) body = `<div class="notice">${RV.state === 'wait' ? '채점 대기 중인 답이 없어요.' : RV.state === 'unpub' ? '공개를 기다리는 피드백 초안이 없어요.' : '제출한 답이 없어요.'}</div>`;
+  if (!items.length) body = `<div class="notice">${RV.state === 'wait' ? '채점 대기 중인 답이 없어요. 👏' : RV.state === 'unpub' ? '공개를 기다리는 피드백 초안이 없어요.' : '제출한 답이 없어요.'}</div>`;
   else if (RV.mode === 'group') {
     const gs = rvGroups();
     body = gs.length ? gs.map((g, k) => {
@@ -106,44 +242,50 @@ function drawReview() {
         <div class="rvq"><span class="badge">${esc(qLabel(g.c))} ${g.i + 1}번</span> ${optLabel(g.q.q)}${qExtra(g.q)}</div>
         <div class="rvrow"><div><span class="muted small">학생 답</span><div class="stu big">${optLabel(g.ans)}</div></div><div><span class="muted small">정답</span><div>${optLabel(g.q.answerText)}</div></div>
           <div class="cnt"><b>${g.items.length}</b>명</div>
-          <div class="ox"><button class="o ${allO ? 'on' : ''}" data-gv="1">O</button><button class="x ${allX ? 'on' : ''}" data-gv="0">X</button></div></div>
-        ${ai.length ? `<div class="small" style="color:${aiOk ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: O ${aiOk} · X ${ai.length - aiOk} — ${esc(ai[0].reason)}</div>` : ''}
-        <div class="names">${g.items.map((r) => `<button class="nm ${r.marks[g.i] ? 'o' : ''}" data-open="${r.id}" title="눌러서 답 전체 보기">${r.st.class_no}-${r.st.number} ${esc(r.st.name)}</button>`).join('')}</div></div>`;
+          <div class="ox" role="group" aria-label="${g.i + 1}번 묶음 채점"><button class="o ${allO ? 'on' : ''}" data-gv="1" aria-pressed="${allO}">O</button><button class="x ${allX ? 'on' : ''}" data-gv="0" aria-pressed="${allX}">X</button></div></div>
+        ${ai.length ? `<div class="small" style="color:${aiOk ? 'var(--ok)' : 'var(--muted)'}">🤖 AI 제안: O ${aiOk} · X ${ai.length - aiOk} — ${esc(ai[0].reason)}</div>` : ''}
+        <div class="names">${g.items.map((r) => `<button class="nm ${r.marks[g.i] ? 'o' : ''}" data-open="${r.id}" title="눌러서 답 전체 보기">${r.st.class_no}-${r.st.number} ${esc(r.st.name)}${r._sv && r._sv.state === 'error' ? ' ⚠️' : ''}</button>`).join('')}</div></div>`;
     }).join('') : '<div class="notice ok">틀린 문항이 없어요. 아래에서 바로 확정할 수 있어요.</div>';
   } else {
     body = items.map((r, k) => {
-      const sc = rvScore(r), tot = r.c.questions.length, sel = RV.sel.has(r.id);
-      const top = `<label class="rvtop"><input type="checkbox" data-sel="${r.id}" ${sel ? 'checked' : ''}> <b>${r.st.class_no}반 ${r.st.number}번 ${esc(r.st.name)}</b> <span class="muted">· ${esc(qLabel(r.c))} ${r.c.kind === 'concept' ? esc(r.c.title) : ''}</span> <b class="sc ${sc === tot ? 'ok' : sc >= tot * 0.8 ? '' : 'low'}">${sc}/${tot}</b>
-        <span class="badge ${r.status === 'graded' ? 'ok' : 'wait'}">${r.status === 'graded' ? '확정됨' : '채점 대기'}</span>${r.reviewed_at ? ' <span class="badge ok">✓ 검토함</span>' : ''}${rvWarn(r) ? ' <span class="badge no">⚠️ 피드백 확인 필요</span>' : ''}</label>`;
-      if (!r.wrong.length && !(r.feedback_draft && !r.feedback)) return `<div class="rvc slim ${k === RV.focus ? 'focus' : ''}" data-k="${k}" data-id="${r.id}">${top}<span class="muted small">만점 · 피드백 초안 없음</span></div>`;
-      return `<div class="rvc ${k === RV.focus ? 'focus' : ''}" data-k="${k}" data-id="${r.id}">${top}
-        ${r.wrong.map((i, j) => { const q = r.c.questions[i]; return `<div class="rvrow ${k === RV.focus && j === RV.row ? 'rowf' : ''}"><div class="n">${i + 1}</div><div class="small">${optLabel(q.q)}</div><div class="stu">${optLabel(answerToText(q, r.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
-          <div class="ox"><button class="o ${r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="1">O</button><button class="x ${!r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="0">X</button></div></div>${r.ai && r.ai[i] ? `<div class="small rvai" style="color:${r.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${r.ai[i].ok ? 'O' : 'X'} — ${esc(r.ai[i].reason)}</div>` : ''}`; }).join('')}
-        ${r.feedback ? `<div class="notice ok small" style="margin:8px 0 0">💬 공개됨: ${esc(r.feedback)}</div>` : `<textarea class="rvfb" data-fb="${r.id}" placeholder="피드백 초안이 없어요. 직접 써도 돼요.">${esc(r.feedback_draft || '')}</textarea>`}
-        <div class="bar" style="margin:6px 0 0"><span class="small muted" data-saved="${r.id}"></span><span style="flex:1"></span><button class="btn sm" data-rev="${r.id}">${r.reviewed_at ? '↺ 검토 취소' : '✓ 검토함'}</button><button class="btn sm ghost" data-open="${r.id}">자세히</button></div></div>`;
+      const sc = rvScore(r), tot = r.c.questions.length, sel = RV.sel.has(r.id), fail = r._sv && r._sv.state === 'error';
+      const top = `<label class="rvtop"><input type="checkbox" data-sel="${r.id}" ${sel ? 'checked' : ''}> <b>${r.st.class_no}반 ${r.st.number}번 ${esc(r.st.name)}</b> <span class="muted">· ${esc(qLabel(r.c))} ${r.c.kind === 'concept' ? esc(r.c.title) : ''}</span> <b class="sc ${sc === tot ? 'ok' : sc >= tot * 0.8 ? '' : 'low'}">${sc}/${tot}</b> ${rvBadges(r)}</label>`;
+      if (!r.wrong.length && !(r.feedback_draft && !r.feedback)) return `<div class="rvc slim ${k === RV.focus ? 'focus' : ''} ${fail ? 'rvfail' : ''}" data-k="${k}" data-id="${r.id}">${top}<span class="muted small">만점 · 피드백 초안 없음</span> <span data-svbox="${r.id}">${rvSvHTML(r)}</span></div>`;
+      return `<div class="rvc ${k === RV.focus ? 'focus' : ''} ${fail ? 'rvfail' : ''}" data-k="${k}" data-id="${r.id}">${top}
+        ${r.wrong.map((i, j) => { const q = r.c.questions[i], src = r.overrides[i] != null ? '선생님' : r.ai && r.ai[i] && r.ai[i].ok && r.marks[i] ? 'AI' : '자동'; return `<div class="rvrow ${k === RV.focus && j === RV.row ? 'rowf' : ''}"><div class="n">${i + 1}</div><div class="small">${optLabel(q.q)}</div><div class="stu">${optLabel(answerToText(q, r.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
+          <div class="ox" role="group" aria-label="${i + 1}번 채점 (지금: ${src})"><button class="o ${r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="1" aria-pressed="${r.marks[i]}">O</button><button class="x ${!r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="0" aria-pressed="${!r.marks[i]}">X</button></div></div>${r.ai && r.ai[i] ? `<div class="small rvai" style="color:${r.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI 제안: ${r.ai[i].ok ? 'O' : 'X'} — ${esc(r.ai[i].reason)}</div>` : ''}`; }).join('')}
+        ${r.feedback ? `<div class="notice ok small" style="margin:8px 0 0">📣 공개됨: ${esc(r.feedback)}</div>` : `<label class="sr-only" for="fb${r.id}">${esc(r.st.name)} 피드백 초안</label><textarea class="rvfb" id="fb${r.id}" data-fb="${r.id}" placeholder="피드백 초안이 없어요. 직접 써도 돼요. (확정할 때 학생에게 공개)">${esc(r.feedback_draft || '')}</textarea>`}
+        <div class="bar" style="margin:6px 0 0"><span class="small" data-svbox="${r.id}" aria-live="polite">${rvSvHTML(r)}</span><span style="flex:1"></span><button class="btn sm" data-rev="${r.id}">${r.reviewed_at ? '↺ 검토 취소' : '✓ 검토함'}</button><button class="btn sm ghost" data-open="${r.id}">자세히</button></div></div>`;
     }).join('');
   }
-  const selN = RV.sel.size, selItems = items.filter((r) => RV.sel.has(r.id));
+  const selN = RV.sel.size, selItems = items.filter((r) => RV.sel.has(r.id)), canPub = selItems.some((r) => r.feedback_draft && !r.feedback);
   el.innerHTML = `${head}<p class="small muted">⌨ ${keys}</p>${body}
     <div class="rvbar"><b>선택 ${selN}건</b><button class="btn sm" id="rvPerfect">만점 선택</button><button class="btn sm" id="rvAll">전체 선택</button><button class="btn sm ghost" id="rvNone">해제</button><span style="flex:1"></span>
-      <button class="btn sm" id="rvPub" ${selItems.some((r) => r.feedback_draft && !r.feedback) ? '' : 'disabled'}>💬 피드백만 공개</button>
-      <button class="btn pri" id="rvGo" ${selN ? '' : 'disabled'}>✔ 선택 ${selN}건 확정 + 피드백 공개</button></div>`;
+      <button class="btn sm" id="rvPub" data-off="${canPub ? 0 : 1}" ${canPub ? '' : 'disabled'}>💬 피드백만 공개</button>
+      <button class="btn pri" id="rvGo" data-off="${selN ? 0 : 1}" ${selN ? '' : 'disabled'}>✔ 선택 ${selN}건 확정 + 피드백 공개</button></div>`;
   bindReview();
+  rvHead();
+  if (fk) restoreFocus(el, fk);
 }
-async function rvMark(r, i, v) {
-  r.marks[i] = v;
-  const overrides = {}; r.marks.forEach((m, j) => { if (m !== !!r.auto[j]) overrides[j] = m; });
-  r.overrides = overrides;
-  try { await T('/api/t/review-save', { id: r.id, overrides }); } catch (e) { alert(e.message); }
+function rvMark(r, i, v) {
+  r.overrides = { ...r.overrides, [i]: v };   // 선생님이 누른 값은 자동 채점과 같아도 기록 (AI가 덮어쓰지 않게)
+  r.marks = rvMarksOf(r);
+  rvQueue(r, { overrides: r.overrides });
 }
 async function rvGroupMark(g, v) {
-  const ids = g.items.map((r) => r.id);
-  try { await T('/api/t/bulk-override', { ids, i: g.i, value: v }); } catch (e) { return alert(e.message); }
-  g.items.forEach((r) => { r.marks[g.i] = v; const o = { ...(r.overrides || {}) }; if (!!r.auto[g.i] === v) delete o[g.i]; else o[g.i] = v; r.overrides = o; });
-  toast(`${ids.length}명 ${g.i + 1}번을 ${v ? 'O' : 'X'}로 바꿨어요`);
-  drawReview();
+  if (RV.busy) return; RV.busy = true;
+  try {
+    await rvFlushAll(g.items);
+    const un = rvUnsaved(g.items);
+    if (un.length) return toast(`저장되지 않은 카드 ${un.length}건이 있어요. 먼저 다시 저장하거나 되돌려 주세요.`, 'error');
+    const ids = g.items.map((r) => r.id), revs = Object.fromEntries(g.items.map((r) => [r.id, r.rev]));
+    let d; try { d = await T('/api/t/bulk-override', { ids, i: g.i, value: v, revs }); } catch (e) { return toast(e.message, 'error'); }
+    const byId = new Map(d.items.map((x) => [x.id, x]));
+    g.items.forEach((r) => { const x = byId.get(r.id); if (!x) { Object.assign(rvSv(r), { state: 'error', err: '다른 곳에서 바뀌었어요', conflict: true, touched: true }); return; } r.overrides = x.overrides; r.rev = x.rev; r._srv.overrides = { ...x.overrides }; r.marks = rvMarksOf(r); });
+    toast(`${d.count}명 ${g.i + 1}번을 ${v ? 'O' : 'X'}로 저장했어요${d.conflicts.length ? ` · ${d.conflicts.length}명은 다른 곳에서 바뀌어 건너뜀 (새로 불러오기 필요)` : ''}`, d.conflicts.length ? 'error' : 'ok');
+    drawReview();
+  } finally { RV.busy = false; }
 }
-let RV_T = {};
 function bindReview() {
   const el = $('#rvBody'), items = RV.data, byId = Object.fromEntries(items.map((r) => [r.id, r]));
   const gs = RV.mode === 'group' ? rvGroups() : null;
@@ -151,32 +293,47 @@ function bindReview() {
   if (gs) el.querySelectorAll('.rvg').forEach((g) => g.querySelectorAll('[data-gv]').forEach((b) => (b.onclick = () => { RV.focus = +g.dataset.k; rvGroupMark(gs[+g.dataset.k], b.dataset.gv === '1'); })));
   el.querySelectorAll('.rvc[data-id]').forEach((card) => {
     const r = byId[+card.dataset.id];
-    card.querySelectorAll('.ox button').forEach((b) => (b.onclick = async () => { RV.focus = +card.dataset.k; await rvMark(r, +b.dataset.i, b.dataset.v === '1'); drawReview(); }));
+    card.querySelectorAll('.ox button').forEach((b) => (b.onclick = () => { RV.focus = +card.dataset.k; rvMark(r, +b.dataset.i, b.dataset.v === '1'); drawReview(); }));
   });
   el.querySelectorAll('[data-sel]').forEach((x) => (x.onchange = () => { x.checked ? RV.sel.add(+x.dataset.sel) : RV.sel.delete(+x.dataset.sel); drawReview(); }));
-  el.querySelectorAll('[data-fb]').forEach((ta) => (ta.oninput = () => {
-    const id = +ta.dataset.fb, r = byId[id]; r.feedback_draft = ta.value;
-    const tag = el.querySelector(`[data-saved="${id}"]`); if (tag) tag.textContent = '저장 중…';
-    clearTimeout(RV_T[id]); RV_T[id] = setTimeout(async () => { try { await T('/api/t/review-save', { id, feedback_draft: ta.value }); if (tag) tag.textContent = '✓ 저장됨'; } catch (e) { if (tag) tag.textContent = '저장 실패: ' + e.message; } }, 700);
-  }));
-  el.querySelectorAll('[data-rev]').forEach((b) => (b.onclick = async () => { const r = byId[+b.dataset.rev], on = !r.reviewed_at; await T('/api/t/review-save', { id: r.id, reviewed: on }); r.reviewed_at = on ? new Date().toISOString() : null; drawReview(); }));
+  // 입력하는 동안은 다시 그리지 않음 (초점·글자 보존). 0.7초 쉬면 저장
+  el.querySelectorAll('[data-fb]').forEach((ta) => (ta.oninput = () => { const r = byId[+ta.dataset.fb]; r.feedback_draft = ta.value; rvQueue(r, { feedback_draft: ta.value }, 700); }));
+  el.querySelectorAll('[data-fb]').forEach((ta) => (ta.onblur = () => { const r = byId[+ta.dataset.fb]; if (r._sv && r._sv.timer) rvFlush(r); }));
+  el.querySelectorAll('[data-rev]').forEach((b) => (b.onclick = () => { const r = byId[+b.dataset.rev], on = !r.reviewed_at; r.reviewed_at = on ? new Date().toISOString() : null; rvQueue(r, { reviewed: on }); drawReview(); }));
+  el.onclick = (e) => {
+    const t = e.target.closest('[data-retry],[data-revert],[data-reload]'); if (!t) return;
+    const r = byId[+(t.dataset.retry || t.dataset.revert || t.dataset.reload)]; if (!r) return;
+    if (t.dataset.retry) rvFlush(r);
+    else if (t.dataset.revert) rvRevert(r);
+    else if (confirm('이 카드는 다른 곳(다른 창·예약 작업)에서 먼저 바뀌었어요.\n새로 불러오면 이 카드에서 고친 내용은 사라져요. 새로 불러올까요?')) { r._sv = null; RV.data = null; reviewView(); }
+  };
   $('#rvPerfect').onclick = () => { items.forEach((r) => rvScore(r) === r.c.questions.length && RV.sel.add(r.id)); drawReview(); };
   $('#rvAll').onclick = () => { items.forEach((r) => RV.sel.add(r.id)); drawReview(); };
   $('#rvNone').onclick = () => { RV.sel.clear(); drawReview(); };
   const commit = async (grade) => {
-    const sel = items.filter((r) => RV.sel.has(r.id));
-    const toGrade = grade ? sel.filter((r) => r.status !== 'graded').length : 0, toPub = sel.filter((r) => r.feedback_draft && !r.feedback).length, warn = sel.filter(rvWarn).length;
-    const names = new Set(sel.map((r) => r.student_id)).size;
-    if (!confirm(`${names}명 · ${sel.length}건\n- 확정: ${toGrade}건\n- 피드백 공개: ${toPub}건${warn ? `\n\n⚠️ 피드백 확인이 필요한 카드가 ${warn}건 있어요. 그래도 진행할까요?` : ''}\n\n학생이 바로 결과와 피드백을 볼 수 있어요.`)) return;
-    $('#rvGo').disabled = true;
-    try { const r = await T('/api/t/review-commit', { ids: sel.map((x) => x.id), publish: true, grade }); toast(`확정 ${r.graded}건 · 피드백 공개 ${r.published}건`); RV.sel.clear(); reviewView(); }
-    catch (e) { alert(e.message); $('#rvGo').disabled = false; }
+    if (RV.busy) return; RV.busy = true;
+    try {
+      const sel = items.filter((r) => RV.sel.has(r.id));
+      $('#rvGo').disabled = $('#rvPub').disabled = true;
+      await rvFlushAll(sel);   // 0.7초 기다리던 초안도 지금 저장
+      const un = rvUnsaved(sel);
+      if (un.length) { rvHead(); return alert(`저장되지 않은 카드 ${un.length}건이 있어요 (저장 실패).\n'다시 저장' 또는 '되돌리기'를 한 뒤 확정하세요.`); }
+      const toGrade = grade ? sel.filter((r) => r.status !== 'graded').length : 0, toPub = sel.filter((r) => r.feedback_draft && !r.feedback).length, warn = sel.filter(rvWarn).length;
+      const names = new Set(sel.map((r) => r.student_id)).size;
+      if (!confirm(`${names}명 · ${sel.length}건\n- 확정: ${toGrade}건\n- 피드백 공개: ${toPub}건${warn ? `\n\n⚠️ 피드백 확인이 필요한 카드가 ${warn}건 있어요. 그래도 진행할까요?` : ''}\n\n학생이 바로 결과와 피드백을 볼 수 있어요.`)) { rvHead(); drawReview(); return; }
+      // 화면의 최신 초안을 함께 보내서 서버가 한 행 UPDATE로 확정+공개 (옛 초안이 공개되지 않게)
+      const r = await T('/api/t/review-commit', { items: sel.map((x) => ({ id: x.id, rev: x.rev, ...(x.feedback ? {} : { feedback_draft: x.feedback_draft || '' }) })), publish: true, grade });
+      toast(`확정 ${r.graded}건 · 피드백 공개 ${r.published}건${r.conflicts.length ? ` · ${r.conflicts.length}건은 다른 곳에서 바뀌어 건너뜀` : ''}`, r.conflicts.length ? 'error' : 'ok');
+      RV.sel.clear(); RV.data = null; reviewView();
+    } catch (e) { toast(e.message, 'error'); drawReview(); }
+    finally { RV.busy = false; }
   };
   $('#rvGo').onclick = () => commit(true);
   $('#rvPub').onclick = () => commit(false);
   // 키보드
   document.onkeydown = (e) => {
-    if (VIEW !== 'review' || $('#modal').innerHTML || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { if (e.key === 'Escape') document.activeElement.blur(); return; }
+    if (VIEW !== 'review' || $('#modal').innerHTML || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { if (e.key === 'Escape' && !$('#modal').innerHTML) document.activeElement.blur(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const n = gs ? gs.length : items.length; if (!n) return;
     const k = e.key.toLowerCase(), move = (d) => { RV.focus = Math.max(0, Math.min(n - 1, RV.focus + d)); RV.row = 0; drawReview(); const f = $('#rvBody .focus'); if (f) f.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
     if (k === 'j') { e.preventDefault(); move(1); }
@@ -185,7 +342,7 @@ function bindReview() {
     else if (!gs) {
       const r = items[RV.focus]; if (!r) return;
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); RV.row = Math.max(0, Math.min(r.wrong.length - 1, RV.row + (e.key === 'ArrowDown' ? 1 : -1))); drawReview(); }
-      else if ((k === 'o' || k === 'x') && r.wrong.length) rvMark(r, r.wrong[Math.min(RV.row, r.wrong.length - 1)], k === 'o').then(drawReview);
+      else if ((k === 'o' || k === 'x') && r.wrong.length) { rvMark(r, r.wrong[Math.min(RV.row, r.wrong.length - 1)], k === 'o'); drawReview(); }
       else if (e.key === ' ') { e.preventDefault(); RV.sel.has(r.id) ? RV.sel.delete(r.id) : RV.sel.add(r.id); drawReview(); }
       else if (k === 'e') { const ta = $(`[data-fb="${r.id}"]`); if (ta) { e.preventDefault(); ta.focus(); } }
       else if (k === 'r') { const b = $(`[data-rev="${r.id}"]`); if (b) b.click(); }
@@ -250,7 +407,7 @@ function drawDash(d) {
   const need = byStu.filter((x) => x.rate < 0.6).sort((a, b) => a.rate - b.rate);
   const notYet = d.students.filter((st) => !subs.some((r) => r.student_id === st.id));
   el.innerHTML = `
-  <div class="stats" style="grid-template-columns:repeat(5,1fr)">
+  <div class="stats s5">
     <div class="stat"><b>${pct(avg(subs.map((r) => r.rate)))}%</b><span>평균 정답률</span></div>
     <div class="stat"><b>${subs.length}</b><span>제출 (${subStudents}/${d.students.length}명)</span></div>
     <div class="stat ${wait ? 'warn' : ''}"><b>${wait}</b><span>채점 대기</span></div>
@@ -273,9 +430,21 @@ function drawDash(d) {
       ${notYet.length ? `<div class="names">${notYet.map((st) => `<span class="nm">${st.class_no}-${st.number} ${esc(st.name)}</span>`).join('')}</div>` : '<div class="notice ok">모두 한 번 이상 냈어요.</div>'}</section>
   </div>`;
 }
-function go(v) {
+const TABHELP = {
+  grades: '📋 조회·개별 수정: 반 성적표를 보고, 칸을 눌러 한 학생의 답을 자세히 고쳐요. 여러 건을 한꺼번에 검토·확정·공개하는 일은 ✅ 검토·공개(작업함)에서 해요.',
+  review: '✅ 작업함: 오늘 처리할 채점 대기 · AI 제안 · 피드백 공개를 여기서 끝내요. 고친 O/X·초안은 바로 저장되고, 저장이 끝나야 확정할 수 있어요.',
+  reports: '📊 반·시험별 정답률과 도움이 필요한 학생을 봐요 (보기만, 바뀌는 것 없음).',
+  links: '🔓 시험을 열고 닫거나, 링크·QR을 나눠 줘요.',
+  key: '세트별 문제와 정답을 확인해요.',
+  roster: '학생 명단과 로그인 ID를 관리해요. 빠진 학생은 지우지 않고 보관해요 (기록 유지, 언제든 복원).',
+};
+async function go(v) {
+  if (v !== VIEW && !(await leaveOK())) return;
+  if (VIEW === 'review' && v !== 'review') RV.data = null;
+  if ($('#modal')._sh) $('#modal')._sh.close();
   VIEW = v; clearInterval(timer); document.onkeydown = null;
-  document.querySelectorAll('#nav .tab').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('#nav .tab').forEach((b) => { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-current', b.dataset.v === v ? 'page' : 'false'); });
+  $('#tabhelp').textContent = TABHELP[v] || '';
   ({ grades, roster, key: keyView, links: linksView, review: reviewView, reports: reportsView })[v]();
 }
 const KORD = { concept: 0, word: 1, spelltest: 2, exam: 3 }, unitNo = (c) => (c.kind === 'concept' ? 0 : parseInt(c.unit, 10) || 99);
@@ -289,16 +458,18 @@ function bindCls(fn) {
 
 // ---------------- 채점·성적 ----------------
 async function grades() {
-  app.innerHTML = `${clsTabs(CLS)}<div id="gx"><p class="muted">불러오는 중…</p></div>`;
+  app.innerHTML = `${clsTabs(CLS)}<div id="todayBox"></div><div id="gx"><p class="muted">불러오는 중…</p></div>`;
   bindCls(grades);
   await drawGrades();
-  timer = setInterval(() => { if (!$('#modal').innerHTML) drawGrades(true); }, 30000);
+  // 30초마다 새로고침 — 창이 열려 있거나 AI 작업 중이거나 탭이 숨어 있으면 건너뜀
+  timer = setInterval(() => { if (!$('#modal').innerHTML && !AIJOB.running && !document.hidden) drawGrades(true); }, 30000);
 }
 let DRAW_SEQ = 0;   // 늦게 도착한 이전 학년·반 응답이 화면을 덮어쓰지 않게
 async function drawGrades(quiet) {
   let d; const my = ++DRAW_SEQ;
-  try { d = await T(`/api/t/overview?grade=${GRADE}&class=${CLS}`); } catch (e) { if (!quiet) $('#gx').innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
-  const gx = $('#gx'); if (!gx || my !== DRAW_SEQ) return;
+  loadToday().then(() => { const tb = $('#todayBox'); if (VIEW === 'grades' && tb) { tb.innerHTML = todayHTML(CLS); bindToday(tb); } });
+  try { d = await T(`/api/t/overview?grade=${GRADE}&class=${CLS}`); } catch (e) { if (!quiet) $('#gx').innerHTML = `<div class="notice" role="alert">${esc(e.message)}</div>`; return; }
+  const gx = $('#gx'); if (!gx || my !== DRAW_SEQ || VIEW !== 'grades') return;
   const by = {}; d.submissions.forEach((s) => (by[s.student_id + ':' + s.concept] = s));
   const hby = {}; (d.history || []).forEach((h) => (hby[h.student_id + ':' + h.concept] = hby[h.student_id + ':' + h.concept] || []).push(h));
   const histTip = (sid, cid) => (hby[sid + ':' + cid] || []).map((h) => `${h.attempt}차 ${h.score}점`).join(', ');
@@ -333,7 +504,7 @@ async function drawGrades(quiet) {
   </div>
   <div class="bar actions">
     <button class="btn sm pri" id="confirmAll">✔ 일괄 확정${waiting ? ` (대기 ${waiting})` : ''}</button>
-    <button class="btn sm" id="aiAll" ${d.aiEnabled ? '' : 'disabled title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 채점 (${aiTodo.length}건 · ${aiItems}문항)</button><span id="aiProg" class="small"></span>
+    <button class="btn sm" id="aiAll" data-off="${d.aiEnabled ? 0 : 1}" ${d.aiEnabled && !AIJOB.running ? '' : 'disabled'} ${d.aiEnabled ? 'title="애매한 오답만 AI에게 보내 O/X를 제안받아요 (확정 전 제안)"' : 'title="Cloudflare에 AI_API_URL, AI_API_KEY, AI_MODEL을 넣으면 켜져요"'}>🤖 AI 제안 받기 (${aiTodo.length}건 · ${aiItems}문항)</button>
     <button class="btn sm" id="reissue">🔁 재출제</button>${drafts ? `<button class="btn sm" id="pubDraft" title="확정된 결과에 AI 피드백 초안을 '선생님 말씀'으로 공개해요 (선생님이 쓴 말이 있으면 그대로)">💬 피드백 초안 공개 (${drafts})</button>` : ''}
     ${d.aiEnabled ? '<button class="btn sm ghost" id="aiCheck" title="예시 답 2개로 AI 연결을 확인해요 (저장 안 함)">🔌 AI 연결 확인</button>' : ''}
     <button class="btn sm" id="regrade" title="정답을 고친 뒤, 이미 낸 답을 다시 자동 채점해요 (직접 고친 O/X는 그대로)">🔄 재채점</button>
@@ -346,12 +517,12 @@ async function drawGrades(quiet) {
     const mine = ids.map((cid) => by[s.id + ':' + cid]);
     const got = mine.filter(Boolean);
     return `<tr><td>${s.number}</td><td class="nm">${esc(s.name)}</td>${mine.map((x, k) => x
-      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup>🤖</sup>' : ''}${x.draft ? '<sup>💬</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
+      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup title="AI 제안">🤖</sup>' : ''}${x.draft ? '<sup title="피드백 초안 (미공개)">💬</sup>' : x.pub ? '<sup title="피드백 공개됨">📣</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
       : hby[s.id + ':' + ids[k]] ? `<td class="muted" title="이전: ${histTip(s.id, ids[k])}">🔁</td>` : `<td class="muted">·</td>`).join('')}<td>${got.length}</td><td>${got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) + '%' : '-'}</td></tr>`;
   }).join('')}
   <tr class="avg"><td></td><td class="nm">반 평균</td>${avg.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr>
   <tr class="avg"><td></td><td class="nm">제출 인원</td>${cnt.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr></tbody></table></div>
-  <details class="help"><summary>ⓘ 표 보는 법</summary><p class="small">칸을 누르면 학생 답을 보고 O/X를 고칠 수 있어요. <span class="badge wait">노랑</span> 채점 대기(숫자 뒤 ?) · <span class="badge ok">초록</span> 확정 80% 이상 · <span class="badge no">빨강</span> 확정 80% 미만 · 🤖 AI 채점함 · <b>2차</b> 재출제 후 다시 푼 결과(칸에 마우스를 올리면 이전 점수) · 🔁 재출제되어 아직 다시 안 푼 학생. 학생은 선생님이 확정한 뒤에 결과를 볼 수 있어요. 🔤 단어 시험 · ✍️ 철자 시험 · 📝 단원평가</p></details>`;
+  <details class="help"><summary>ⓘ 표 보는 법</summary><p class="small">칸을 누르면 학생 답을 보고 O/X를 고칠 수 있어요. <span class="badge wait">노랑</span> 채점 대기(숫자 뒤 ?) · <span class="badge ok">초록</span> 확정 80% 이상 · <span class="badge no">빨강</span> 확정 80% 미만 · 🤖 AI 제안 있음(확정 전) · 💬 피드백 초안(학생에게 안 보임) · 📣 피드백 공개됨 · <b>2차</b> 재출제 후 다시 푼 결과(칸에 마우스를 올리면 이전 점수) · 🔁 재출제되어 아직 다시 안 푼 학생. 학생은 선생님이 확정한 뒤에 결과를 볼 수 있어요. 🔤 단어 시험 · ✍️ 철자 시험 · 📝 단원평가</p></details>`;
   gx.querySelectorAll('[data-sub]').forEach((td) => (td.onclick = () => openSub(+td.dataset.sub)));
   if ($('#aiCheck')) $('#aiCheck').onclick = async () => {
     $('#aiCheck').disabled = true; $('#aiCheck').textContent = '🔌 확인 중…';
@@ -361,7 +532,7 @@ async function drawGrades(quiet) {
     } catch (e) { alert('❌ AI 연결 실패\n' + e.message); }
     $('#aiCheck').disabled = false; $('#aiCheck').textContent = '🔌 AI 연결 확인';
   };
-  $('#regrade').onclick = async () => { const r = await T('/api/t/regrade', { grade: GRADE }); toast(`${GRADE}학년 답 ${r.checked}건 확인, ${r.changed}건 다시 채점했어요`); drawGrades(); };
+  $('#regrade').onclick = async () => { $('#regrade').disabled = true; try { const r = await T('/api/t/regrade', { grade: GRADE }); toast(`${GRADE}학년 답 ${r.checked}건 확인, ${r.changed}건 다시 채점했어요`, 'ok'); drawGrades(); } catch (e) { toast(e.message, 'error'); $('#regrade').disabled = false; } };
   gx.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => { GROUP = b.dataset.grp; localStorage.setItem('eng4-grp', GROUP); drawGrades(); }));
   gx.querySelectorAll('[data-uf]').forEach((b) => (b.onclick = () => { UNITF = b.dataset.uf; localStorage.setItem('eng4-unitf', UNITF); drawGrades(); }));
   $('#rf').onclick = () => drawGrades();
@@ -370,17 +541,15 @@ async function drawGrades(quiet) {
   $('#reissue').onclick = () => openReissue(ids, d, by);
   if ($('#pubDraft')) $('#pubDraft').onclick = async () => {
     if (!confirm(`${GRADE}학년 ${CLS}반의 확정된 결과 ${drafts}건에 AI 피드백 초안을 공개할까요?\n학생 결과 화면에 '선생님 말씀'으로 보여요. 공개 전에 칸을 눌러 초안을 고칠 수도 있어요.`)) return;
-    const r = await T('/api/t/publish-drafts', { grade: GRADE, class: CLS }); toast(`피드백 ${r.count}건을 공개했어요`); drawGrades();
+    try { const r = await T('/api/t/publish-drafts', { grade: GRADE, class: CLS }); toast(`피드백 ${r.count}건을 공개했어요${r.skipped ? ` · ${r.skipped}건은 다른 곳에서 바뀌어 건너뜀` : ''}`, r.skipped ? 'error' : 'ok'); } catch (e) { toast(e.message, 'error'); }
+    drawGrades();
   };
-  $('#aiAll').onclick = async () => {
-    if (!aiTodo.length) return toast('AI로 채점할 답이 없어요');
-    if (!confirm(`AI로 ${aiTodo.length}건(${aiItems}문항)을 확인할까요?\n철자 1~2자 차이·띄어쓰기·말 덧붙임·칸 위치처럼 판별이 애매한 오답만 AI에게 보내요.\nAI가 인정한 답은 O로 '제안'만 하고, 선생님이 확정해야 학생에게 공개돼요.`)) return;
-    $('#aiAll').disabled = true; let ok = 0, bad = 0;
-    for (const [k, x] of aiTodo.entries()) {
-      $('#aiProg').textContent = ` 🤖 ${k + 1}/${aiTodo.length} 채점 중…`;
-      try { await T('/api/t/ai-grade', { id: x.id }); ok++; } catch (e) { bad++; if (bad === 1) alert(e.message); if (e.status === 503 || e.status === 401) break; }
-    }
-    toast(`AI 채점 ${ok}건 완료${bad ? `, 실패 ${bad}건` : ''}`); drawGrades();
+  // 메뉴를 옮겨도 계속 돌고(머리줄에 진행 표시), 한 번에 하나만. 중지·이어서·실패만 다시는 머리줄에서
+  $('#aiAll').onclick = () => {
+    if (AIJOB.running) return toast('이미 AI 채점 중이에요 (머리줄에서 진행을 볼 수 있어요)', 'error');
+    if (!aiTodo.length) return toast('AI로 확인할 답이 없어요');
+    if (!confirm(`AI로 ${aiTodo.length}건(${aiItems}문항)을 확인할까요?\n철자 1~2자 차이·띄어쓰기·말 덧붙임·칸 위치처럼 판별이 애매한 오답만 AI에게 보내요.\n선생님이 직접 정한 O/X는 보내지도 바꾸지도 않아요.\nAI가 인정한 답은 O로 '제안'만 하고, 선생님이 확정해야 학생에게 공개돼요.\n\n다른 메뉴로 옮겨도 계속 진행돼요.`)) return;
+    runAI(aiTodo.map((x) => x.id));
   };
   $('#confirmAll').onclick = () => openConfirm(ids);
 }
@@ -397,64 +566,103 @@ function downloadCSV(d, by) {
   a.download = `${GRADE}학년${CLS}반_영어_성적.csv`; a.click();
 }
 
+// 한 학생 답 자세히: O/X·학생에게 남길 말. 저장 방식은 검토·공개와 같음(누른 O/X는 선생님 값으로 기록, rev로 충돌 감지)
+// 버튼: 채점 대기면 [확정] [저장(대기 유지)] [AI 제안] / 확정됐으면 [수정 저장(확정 유지)] [↩ 확정 취소]
 async function openSub(id) {
-  const m = $('#modal');
-  m.innerHTML = '<div class="modal"><div class="box"><p class="muted">불러오는 중…</p></div></div>';
-  let d; try { d = await T('/api/t/submission?id=' + id); } catch (e) { m.innerHTML = ''; alert(e.message); return; }
+  const sh = shell('학생 답 자세히', () => !dirty() || confirm('저장하지 않은 O/X·말이 있어요. 버리고 닫을까요?'), () => {
+    if (VIEW === 'grades') drawGrades(true);
+    else if (VIEW === 'review' && changed) { if (RV.data) { const r = RV.data.find((x) => x.id === id); if (r && r._sv && r._sv.state !== 'saved') return; } RV.data = null; reviewView(); }
+  });
+  const m = sh.m; let changed = false;
+  m.innerHTML = '<div class="modal"><div class="box"><p class="muted" role="status">불러오는 중…</p></div></div>';
+  // 검토 화면에서 이 카드에 저장 중인 게 있으면 먼저 끝냄
+  if (RV.data) { const r = RV.data.find((x) => x.id === id); if (r) await rvFlushAll([r]); }
+  let d; try { d = await T('/api/t/submission?id=' + id); } catch (e) { sh.close(); toast(e.message, 'error'); return; }
+  if (m._sh !== sh) return;
   const s = d.submission, c = KEY.find((x) => x.id === s.concept);
-  const marks = c.questions.map((_, i) => (s.overrides && s.overrides[i] != null ? s.overrides[i] : s.auto[i]));
-  const draw = () => {
-    const score = marks.filter(Boolean).length;
-    m.innerHTML = `<div class="modal" id="bg"><div class="box">
-      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${d.student.grade}학년 ${d.student.class_no}반 ${d.student.number}번 ${esc(d.student.name)} · ${qLabel(c)} ${esc(c.title)}</b><button class="btn sm" id="x">닫기</button></div>
-      <p class="small muted">제출: ${new Date(s.submitted_at).toLocaleString('ko-KR')} · 상태: ${s.status === 'graded' ? '<b style="color:var(--ok)">확정됨</b>' : '<b style="color:var(--wait)">채점 대기</b>'}</p>
+  const srvMarks = () => c.questions.map((_, i) => (s.overrides && s.overrides[i] != null ? !!s.overrides[i] : !!s.auto[i]));
+  let marks = srvMarks(), touched = new Set(), busy = false;
+  const fbNow = () => ($('#fbk') ? $('#fbk').value : s.feedback || '');
+  const dirty = () => touched.size > 0 || fbNow() !== (s.feedback || '');
+  MODAL_DIRTY = dirty;
+  const overridesNow = () => { const o = { ...(s.overrides || {}) }; for (const i of touched) o[i] = marks[i]; return o; };
+  const src = (i) => (touched.has(i) ? '👩‍🏫 선생님(저장 전)' : s.overrides && s.overrides[i] != null ? (s.ai && s.ai[i] && s.ai[i].ok && s.overrides[i] === true ? '🤖 AI 제안' : '👩‍🏫 선생님') : '자동');
+  const draw = (note) => {
+    const fb = fbNow(), score = marks.filter(Boolean).length, graded = s.status === 'graded';
+    m.innerHTML = `<div class="modal"><div class="box">
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1" id="subTitle">${d.student.grade}학년 ${d.student.class_no}반 ${d.student.number}번 ${esc(d.student.name)}${d.student.archived_at ? ' <span class="badge">보관됨</span>' : ''} · ${qLabel(c)} ${esc(c.title)}</b><button class="btn sm" id="x">닫기</button></div>
+      <p class="small muted substate">제출: ${new Date(s.submitted_at).toLocaleString('ko-KR')} · 채점: ${graded ? '<b style="color:var(--ok)">확정됨 (학생에게 보임)</b>' : '<b style="color:var(--wait)">채점 대기 (학생에게 안 보임)</b>'}
+        · AI: ${s.ai ? '🤖 제안 있음' : '없음'} · 피드백: ${s.feedback ? (graded ? '📣 공개됨' : '저장됨 (확정하면 공개)') : s.feedback_draft ? '💬 초안만 (미공개)' : '없음'}
+        · <span id="subSave" class="st ${dirty() ? 'st-saving' : 'st-saved'}" role="status">${note || (dirty() ? '✎ 저장 안 한 변경 있음' : '✓ 저장된 상태')}</span></p>
       <div class="gr h"><div>#</div><div>문제</div><div>학생 답</div><div>정답</div><div>채점</div></div>
       ${c.questions.map((q, i) => `<div class="gr"><div><b>${i + 1}</b></div><div class="small">${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(🔊 ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}</div>
         <div class="stu">${optLabel(answerToText(q, s.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
-        <div><div class="ox"><button class="o ${marks[i] ? 'on' : ''}" data-i="${i}" data-v="1">O</button><button class="x ${!marks[i] ? 'on' : ''}" data-i="${i}" data-v="0">X</button></div>
-        <div class="auto">자동: ${s.auto[i] ? 'O' : 'X'}${marks[i] !== s.auto[i] ? ' → 수정함' : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}${s.ai[i].why ? ` <span class="muted">(${esc(s.ai[i].why)})</span>` : ''}</div>` : ''}`).join('')}
+        <div><div class="ox" role="group" aria-label="${i + 1}번 채점"><button class="o ${marks[i] ? 'on' : ''}" data-i="${i}" data-v="1" aria-pressed="${marks[i]}">O</button><button class="x ${!marks[i] ? 'on' : ''}" data-i="${i}" data-v="0" aria-pressed="${!marks[i]}">X</button></div>
+        <div class="auto">자동 ${s.auto[i] ? 'O' : 'X'}${marks[i] !== !!s.auto[i] || touched.has(i) || (s.overrides && s.overrides[i] != null) ? ` · ${src(i)} ${marks[i] ? 'O' : 'X'}` : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI 제안: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}${s.ai[i].why ? ` <span class="muted">(${esc(s.ai[i].why)})</span>` : ''}</div>` : ''}`).join('')}
       <h3>점수: ${score} / ${c.questions.length}${(s.attempt || 1) > 1 ? ` <span class="badge">${s.attempt}차</span>` : ''}</h3>
       ${(d.history || []).length ? `<details class="help" open><summary>📚 이전 기록 ${d.history.length}개</summary><table class="plain small" style="margin-top:6px"><tr><th>차수</th><th>점수</th><th>문항별 (O/X)</th><th>채점일</th></tr>${d.history.map((h) => `<tr><td>${h.attempt}차</td><td><b>${h.score}</b> / ${c.questions.length}</td><td style="font-family:monospace">${h.marks.map((mk, i) => `<span style="color:${mk ? 'var(--ok)' : 'var(--no)'}" title="${i + 1}번">${mk ? 'O' : 'X'}</span>`).join('')}</td><td>${fmtDate(h.graded_at) || '채점 전'}</td></tr>`).join('')}</table></details>` : ''}
       ${s.feedback_draft ? `<div class="notice small" style="margin:8px 0">💬 <b>AI 피드백 초안</b> (아직 학생에게 안 보여요): ${esc(s.feedback_draft)} <button class="btn sm" id="useDraft">↓ 아래 칸에 넣기</button></div>` : ''}
-      <label class="small muted">학생에게 남길 말 (선택)</label><textarea id="fbk" placeholder="예: 요일 첫 글자는 대문자로 써요!">${esc(s.feedback || '')}</textarea>
-      <div class="bar"><button class="btn pri" id="ok">채점 확정 (학생에게 결과 공개)</button><button class="btn" id="save">저장만 (채점 대기 유지)</button><button class="btn" id="aiOne">🤖 AI 채점</button><span style="flex:1"></span><button class="btn" id="redo">🔁 다시 풀게 하기 (기록 남김)</button><button class="btn sm danger" id="reset" title="기록 없이 이 답을 완전히 지워요">완전 삭제</button></div>
+      <label class="small muted" for="fbk">학생에게 남길 말 (선택${graded ? ' · 저장하면 학생 화면에 바로 보여요' : ' · 확정하면 보여요'})</label><textarea id="fbk" placeholder="예: 요일 첫 글자는 대문자로 써요!">${esc(fb)}</textarea>
+      <div class="bar">${graded
+        ? `<button class="btn pri" id="save">수정 저장 (확정 유지 · 학생에게 바로 반영)</button><button class="btn" id="undo" title="학생 화면에서 결과를 다시 숨겨요">↩ 확정 취소 (채점 대기로)</button><button class="btn" id="aiOne" disabled title="확정된 결과는 AI 제안을 받지 않아요. 확정 취소 후 사용하세요">🤖 AI 제안</button>`
+        : `<button class="btn pri" id="ok">✔ 채점 확정 (학생에게 결과 공개)</button><button class="btn" id="save">저장 (채점 대기 유지)</button><button class="btn" id="aiOne" ${AIJOB.running ? 'disabled title="AI 일괄 작업 중"' : ''}>🤖 AI 제안</button>`}
+        <span style="flex:1"></span><button class="btn" id="redo">🔁 다시 풀게 하기 (기록 남김)</button><button class="btn sm danger" id="reset" title="기록 없이 이 답을 완전히 지워요">완전 삭제</button></div>
     </div></div>`;
-    m.querySelectorAll('.ox button').forEach((b) => (b.onclick = () => { s.feedback = $('#fbk').value; marks[+b.dataset.i] = b.dataset.v === '1'; draw(); }));
-    $('#x').onclick = close;
-    $('#bg').onclick = (e) => { if (e.target.id === 'bg') close(); };
-    const save = async (status) => {
-      const overrides = {}; marks.forEach((v, i) => { if (v !== s.auto[i]) overrides[i] = v; });
-      await T('/api/t/grade', { id, overrides, feedback: $('#fbk').value, status });
-      toast(status === 'graded' ? '확정했어요' : '저장했어요'); close();
-    };
-    if ($('#useDraft')) $('#useDraft').onclick = () => { $('#fbk').value = s.feedback_draft; $('#fbk').focus(); };
-    $('#ok').onclick = () => save('graded');
-    $('#save').onclick = () => save('submitted');
-    $('#aiOne').onclick = async () => {
-      $('#aiOne').disabled = true; $('#aiOne').textContent = '🤖 채점 중…';
-      try {
-        const r = await T('/api/t/ai-grade', { id });
-        s.ai = r.ai; s.overrides = r.overrides; s.feedback = $('#fbk').value;
-        c.questions.forEach((_, i) => (marks[i] = r.overrides[i] != null ? r.overrides[i] : s.auto[i]));
-        draw(); toast('AI 제안을 반영했어요. 확인 후 확정하세요');
-      } catch (e) { alert(e.message); draw(); }
-    };
-    $('#redo').onclick = async () => { if (!confirm('이 답은 이전 기록으로 남기고, 같은 시험을 다시 풀게 할까요?')) return; await T('/api/t/reissue', { id, open: true }); await loadClosed(); toast('재출제했어요 (이전 기록 보관)'); close(); };
-    $('#reset').onclick = async () => { if (!confirm('기록을 남기지 않고 이 답을 완전히 지울까요? 되돌릴 수 없어요.')) return; await T('/api/t/reset', { id }); toast('삭제했어요'); close(); };
+    m.querySelectorAll('.ox button').forEach((b) => (b.onclick = () => { const i = +b.dataset.i; marks[i] = b.dataset.v === '1'; touched.add(i); draw(); }));
+    $('#fbk').oninput = () => { const el = $('#subSave'); if (el) statusMsg(el, dirty() ? '✎ 저장 안 한 변경 있음' : '✓ 저장된 상태', dirty() ? 'saving' : 'saved'); };
+    $('#x').onclick = () => sh.tryClose();
+    if ($('#useDraft')) $('#useDraft').onclick = () => { $('#fbk').value = s.feedback_draft; $('#fbk').oninput(); $('#fbk').focus(); };
+    if ($('#ok')) $('#ok').onclick = () => save('graded');
+    $('#save').onclick = () => save(undefined);
+    if ($('#undo')) $('#undo').onclick = () => { if (confirm('확정을 취소할까요? 학생 화면에서 결과가 다시 숨겨져요.' + (dirty() ? '\n지금 고친 O/X·말도 함께 저장돼요.' : ''))) save('submitted'); };
+    $('#aiOne').onclick = ai;
+    $('#redo').onclick = async () => { if (!confirm('이 답은 이전 기록으로 남기고, 같은 시험을 다시 풀게 할까요?')) return; try { await T('/api/t/reissue', { id, open: true }); await loadClosed(); toast('재출제했어요 (이전 기록 보관)', 'ok'); changed = true; touched.clear(); sh.close(); } catch (e) { toast(e.message, 'error'); } };
+    $('#reset').onclick = async () => { if (!confirm('기록을 남기지 않고 이 답을 완전히 지울까요? 되돌릴 수 없어요.')) return; try { await T('/api/t/reset', { id }); toast('삭제했어요'); changed = true; touched.clear(); sh.close(); } catch (e) { toast(e.message, 'error'); } };
   };
-  const close = () => { m.innerHTML = ''; if (VIEW === 'grades') drawGrades(); else if (VIEW === 'review') reviewView(); };
+  // status: 'graded'(확정) | 'submitted'(확정 취소) | undefined(상태 그대로)
+  const save = async (status, keepOpen) => {
+    if (busy) return false; busy = true;
+    const fb = fbNow(), overrides = overridesNow();
+    const el = $('#subSave'); if (el) statusMsg(el, '저장 중…', 'saving');
+    m.querySelectorAll('.bar .btn').forEach((b) => (b.disabled = true));
+    try {
+      const r = await T('/api/t/grade', { id, rev: s.rev, overrides, feedback: fb, status });
+      Object.assign(s, { rev: r.rev, status: r.status, overrides, feedback: fb.slice(0, 500) || null });
+      touched.clear(); marks = srvMarks(); changed = true;
+      if (RV.data) { const x = RV.data.find((y) => y.id === id); if (x) { Object.assign(x, { rev: r.rev, status: r.status, overrides: { ...overrides }, feedback: s.feedback, _srv: { ...x._srv, overrides: { ...overrides } } }); x.marks = rvMarksOf(x); } }
+      busy = false;
+      if (keepOpen) { draw('✓ 저장했어요'); return true; }
+      toast(status === 'graded' ? '확정했어요' : status === 'submitted' ? '확정을 취소했어요 (채점 대기)' : '저장했어요', 'ok'); sh.close(); return true;
+    } catch (e) {
+      busy = false;
+      draw(); const el2 = $('#subSave'); if (el2) statusMsg(el2, '⚠️ 저장 실패: ' + e.message + (e.status === 409 ? ' — 닫고 다시 열어 주세요' : ''), 'error');
+      return false;
+    }
+  };
+  // AI 제안: 저장 안 한 O/X가 있으면 먼저 저장 (AI가 선생님 값을 덮어쓰지 않게)
+  const ai = async () => {
+    if (dirty()) { if (!confirm('저장하지 않은 O/X·말이 있어요. 먼저 저장(채점 대기 유지)한 뒤 AI 제안을 받을까요?')) return; if (!(await save(undefined, true))) return; }
+    if (busy) return; busy = true;
+    $('#aiOne').disabled = true; $('#aiOne').textContent = '🤖 확인 중…';
+    try {
+      const r = await T('/api/t/ai-grade', { id, rev: s.rev });
+      Object.assign(s, { ai: r.ai, overrides: r.overrides, rev: r.rev }); marks = srvMarks(); changed = true; busy = false;
+      draw(r.asked ? `🤖 AI가 ${r.asked}문항을 봤어요 — 확인 후 확정하세요` : '🤖 AI에게 보낼 애매한 오답이 없어요');
+    } catch (e) { busy = false; draw(); statusMsg($('#subSave'), '⚠️ AI 실패: ' + e.message, 'error'); }
+  };
   draw();
 }
 
 // ---------------- 일괄 확정 / 확정 취소 ----------------
 function openConfirm(visibleIds) {
-  const m = $('#modal'), sets = KG();
+  const sh = shell('일괄 확정'), m = sh.m, sets = KG();
   const st = { scope: 'class', undo: false, filter: 'all', sel: new Set(visibleIds), counts: null, useDraft: true };
   const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
   const body = (extra) => ({ grade: GRADE, class: st.scope === 'class' ? CLS : null, concepts: [...st.sel], filter: st.filter, undo: st.undo, useDraft: st.useDraft, ...extra });
   // 시험별 대상 수(전체 시험 기준)를 먼저 세어 둠
   const loadCounts = async () => {
-    const r = await T('/api/t/confirm-all', { grade: GRADE, class: st.scope === 'class' ? CLS : null, filter: st.filter, undo: st.undo, dry: true });
+    let r; try { r = await T('/api/t/confirm-all', { grade: GRADE, class: st.scope === 'class' ? CLS : null, filter: st.filter, undo: st.undo, dry: true }); } catch (e) { toast(e.message, 'error'); st.counts = {}; draw(); return; }
+    if (m._sh !== sh) return;
     st.counts = r.byConcept;
     // 처음엔 '보이는 시험 중 대상이 있는 것'만 골라 둠
     if (!st.touched) st.sel = new Set(visibleIds.filter((id) => st.counts[id]));
@@ -464,7 +672,7 @@ function openConfirm(visibleIds) {
     const cnt = (id) => (st.counts ? st.counts[id] || 0 : 0);
     const total = [...st.sel].reduce((a, id) => a + cnt(id), 0);
     const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
-    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+    m.innerHTML = `<div class="modal"><div class="box">
       <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${st.undo ? '↩ 확정 취소' : '✔ 일괄 확정'}</b><button class="btn sm" id="x">닫기</button></div>
       <div class="tabs seg" style="margin-bottom:10px"><button class="tab ${!st.undo ? 'on' : ''}" data-undo="0">✔ 확정하기</button><button class="tab ${st.undo ? 'on' : ''}" data-undo="1">↩ 확정 취소</button></div>
       <p class="small muted">${st.undo ? '확정된 결과를 다시 <b>채점 대기</b>로 돌려요. 학생 화면에서 결과가 다시 숨겨져요. (점수·O/X 수정 내용은 그대로)' : '채점 대기 중인 결과를 <b>지금 보이는 점수 그대로</b> 확정해요. 확정하면 학생이 결과를 볼 수 있어요.'}</p>
@@ -487,14 +695,13 @@ function openConfirm(visibleIds) {
     if ($('#cfDraft')) $('#cfDraft').onchange = () => (st.useDraft = $('#cfDraft').checked);
     $('#cfAll').onclick = () => { st.touched = true; sets.forEach((c) => cnt(c.id) && st.sel.add(c.id)); draw(); };
     $('#cfNone').onclick = () => { st.touched = true; st.sel.clear(); draw(); };
-    $('#x').onclick = () => (m.innerHTML = '');
-    $('#bg').onclick = (e) => { if (e.target.id === 'bg') m.innerHTML = ''; };
+    $('#x').onclick = () => sh.close();
     $('#cfGo').onclick = async () => {
       const where = st.scope === 'class' ? `${GRADE}학년 ${CLS}반` : `${GRADE}학년 전체 반`;
       if (!confirm(st.undo ? `${where}의 확정된 결과 ${total}건을 채점 대기로 되돌릴까요?\n학생 화면에서 결과가 다시 숨겨져요.` : `${where}의 결과 ${total}건을 확정할까요?\n확정하면 학생이 결과를 볼 수 있어요.`)) return;
       $('#cfGo').disabled = true;
-      const r = await T('/api/t/confirm-all', body());
-      m.innerHTML = ''; toast(st.undo ? `${r.count}건 확정 취소했어요` : `${r.count}건 확정했어요${r.drafts ? ` · 피드백 ${r.drafts}건 공개` : ''}`); drawGrades();
+      let r; try { r = await T('/api/t/confirm-all', body()); } catch (e) { toast(e.message, 'error'); $('#cfGo').disabled = false; return; }
+      sh.close(); toast(st.undo ? `${r.count}건 확정 취소했어요` : `${r.count}건 확정했어요${r.drafts ? ` · 피드백 ${r.drafts}건 공개` : ''}${r.conflicts ? ` · ${r.conflicts}건은 다른 곳에서 바뀌어 건너뜀` : ''}`, r.conflicts ? 'error' : 'ok'); drawGrades();
     };
   };
   draw(); loadCounts();
@@ -502,15 +709,15 @@ function openConfirm(visibleIds) {
 
 // ---------------- 재출제 ----------------
 function openReissue(visibleIds, d, by) {
-  const m = $('#modal'), totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
   const sets = KG().filter((c) => d.students.some((st) => by[st.id + ':' + c.id]));
   if (!sets.length) return alert('이 반에서 제출된 시험이 아직 없어요.');
+  const sh = shell('재출제'), m = sh.m, totalOf = (cid) => KEY.find((c) => c.id === cid).questions.length;
   let cid = (sets.find((c) => visibleIds.includes(c.id)) || sets[0]).id;
   const sel = new Set();
   const draw = () => {
     const c = KEY.find((x) => x.id === cid), n = totalOf(cid);
     const subs = d.students.map((st) => ({ st, x: by[st.id + ':' + cid] })).filter((r) => r.x);
-    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+    m.innerHTML = `<div class="modal"><div class="box">
       <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🔁 ${GRADE}학년 ${CLS}반 재출제</b><button class="btn sm" id="x">닫기</button></div>
       <p class="small muted">고른 학생의 지금 답과 점수는 <b>이전 기록(1차, 2차…)</b>으로 남기고, 같은 시험을 처음부터 다시 풀게 해요.</p>
       <label class="small muted">시험</label>
@@ -529,13 +736,13 @@ function openReissue(visibleIds, d, by) {
       if (b.dataset.pick === 'low') subs.forEach(({ st, x }) => x.score < n * 0.8 && sel.add(st.id));
       draw();
     }));
-    $('#x').onclick = () => (m.innerHTML = '');
-    $('#bg').onclick = (e) => { if (e.target.id === 'bg') m.innerHTML = ''; };
+    $('#x').onclick = () => sh.close();
     $('#rsGo').onclick = async () => {
       if (!confirm(`${c.title}\n${sel.size}명에게 다시 풀게 할까요? 지금 결과는 이전 기록으로 남아요.`)) return;
-      const r = await T('/api/t/reissue', { concept: cid, student_ids: [...sel], open: $('#rsOpen').checked });
-      if ($('#rsOpen').checked) await loadClosed();
-      m.innerHTML = ''; toast(`${r.count}명 재출제했어요`); drawGrades();
+      const open = $('#rsOpen').checked; $('#rsGo').disabled = true;
+      let r; try { r = await T('/api/t/reissue', { concept: cid, student_ids: [...sel], open }); } catch (e) { toast(e.message, 'error'); $('#rsGo').disabled = false; return; }
+      if (open) await loadClosed();
+      sh.close(); toast(`${r.count}명 재출제했어요 (이전 기록 보관)`, 'ok'); drawGrades();
     };
   };
   draw();
@@ -543,9 +750,10 @@ function openReissue(visibleIds, d, by) {
 
 // ---------------- 결과 일괄 출력 ----------------
 async function openPrintPanel(visibleIds) {
-  const m = $('#modal');
-  m.innerHTML = '<div class="modal"><div class="box"><p class="muted">불러오는 중…</p></div></div>';
-  let d; try { d = await T(`/api/t/report?grade=${GRADE}&class=${CLS}`); } catch (e) { m.innerHTML = ''; alert(e.message); return; }
+  const sh = shell('결과 출력'), m = sh.m;
+  m.innerHTML = '<div class="modal"><div class="box"><p class="muted" role="status">불러오는 중…</p></div></div>';
+  let d; try { d = await T(`/api/t/report?grade=${GRADE}&class=${CLS}`); } catch (e) { sh.close(); toast(e.message, 'error'); return; }
+  if (m._sh !== sh) return;
   const hby = {}; (d.history || []).forEach((h) => (hby[h.student_id + ':' + h.concept] = hby[h.student_id + ':' + h.concept] || []).push(h));
   const sets = KG(), has = {};
   d.submissions.forEach((x) => (has[x.student_id + ':' + x.concept] = x));
@@ -556,7 +764,7 @@ async function openPrintPanel(visibleIds) {
   const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
   const draw = () => {
     const onlyGraded = $('#pgOnly') ? $('#pgOnly').checked : true, detail = $('#pgDetail') ? $('#pgDetail').checked : true;
-    m.innerHTML = `<div class="modal" id="bg"><div class="box">
+    m.innerHTML = `<div class="modal"><div class="box">
       <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🖨 ${GRADE}학년 ${CLS}반 결과 출력</b><button class="btn sm" id="x">닫기</button></div>
       <div class="pp">
         <div><div class="bar" style="margin:0 0 6px"><b style="flex:1">학생 (${selSt.size}/${d.students.length})</b><button class="btn sm" id="stAll">전체 선택</button><button class="btn sm ghost" id="stNone">선택 해제</button></div>
@@ -580,8 +788,7 @@ async function openPrintPanel(visibleIds) {
     $('#ssAll').onclick = () => { sets.forEach((c) => cntOf(c.id) && selSet.add(c.id)); draw(); };
     $('#ssNone').onclick = () => { selSet.clear(); draw(); };
     $('#pgOnly').onchange = info; $('#pgDetail').onchange = info;
-    $('#x').onclick = () => (m.innerHTML = '');
-    $('#bg').onclick = (e) => { if (e.target.id === 'bg') m.innerHTML = ''; };
+    $('#x').onclick = () => sh.close();
     $('#pgGo').onclick = () => {
       const og = $('#pgOnly').checked, det = $('#pgDetail').checked;
       const chosen = sets.filter((c) => selSet.has(c.id));
@@ -591,7 +798,7 @@ async function openPrintPanel(visibleIds) {
       }).filter(Boolean);
       if (!pages.length) return alert('출력할 결과가 없어요. 학생과 시험을 확인해 주세요.');
       $('#printArea').innerHTML = pages.join('');
-      m.innerHTML = '';
+      sh.close();
       printOnly($('#printArea'));
     };
     info();
@@ -607,37 +814,48 @@ async function roster() {
   ${RSUB === 'upload' ? `<div class="card"><div class="bar" style="margin-top:0"><input type="file" id="file" accept=".xlsx,.xls,.csv,.txt">
     <label>학년 <select id="defgrade" class="field">${[3, 4].map((g) => `<option value="${g}" ${g === GRADE ? 'selected' : ''}>${g}학년</option>`).join('')}</select></label>
     <label>반 정보가 없을 때 <select id="defcls" class="field">${Array.from({ length: 15 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${n === CLS ? 'selected' : ''}>${n}반</option>`).join('')}</select></label></div>
-    <details class="help"><summary>ⓘ 어떤 파일을 올릴 수 있나요?</summary><p class="small">· <b>반, 번호, 이름</b> 열이 있는 엑셀(.xlsx/.xls/.csv)<br>· ‘&lt;3학년 1반&gt;’ 같은 제목 줄이 반마다 있는 출석부 형식 (학년·반을 알아서 읽어요)<br>· 시트 이름이 ‘1반’, ‘2반’…인 파일<br>· <b>‘학생 계정 ID’ 열</b>을 로그인용으로 함께 읽어요. 한 칸에 ID가 두 개면 둘 다 쓸 수 있어요. AIEP 이메일은 저장하지 않아요.<br>· 같은 학년·반·번호가 이미 있으면 이름과 ID만 바뀌고, 학생이 낸 답은 그대로 남아요.</p></details>
+    <details class="help"><summary>ⓘ 어떤 파일을 올릴 수 있나요?</summary><p class="small">· <b>반, 번호, 이름</b> 열이 있는 엑셀(.xlsx/.xls/.csv)<br>· ‘&lt;3학년 1반&gt;’ 같은 제목 줄이 반마다 있는 출석부 형식 (학년·반을 알아서 읽어요)<br>· 시트 이름이 ‘1반’, ‘2반’…인 파일<br>· <b>‘학생 계정 ID’ 열</b>을 로그인용으로 함께 읽어요. 한 칸에 ID가 두 개면 둘 다 쓸 수 있어요. AIEP 이메일은 저장하지 않아요.<br>· 같은 학년·반·번호가 이미 있으면 이름과 ID만 바뀌고, 학생이 낸 답은 그대로 남아요.<br>· 저장 전에 반마다 <b>추가·바뀜·보관</b>될 학생과 답 수를 보여 줘요. 명렬표에서 빠진 학생은 지우지 않고 보관해요.</p></details>
     <div id="pv"></div></div>` : '<div id="cur"></div>'}`;
   bindCls(roster);
   app.querySelectorAll('[data-rsub]').forEach((b) => (b.onclick = () => { RSUB = b.dataset.rsub; roster(); }));
-  if (RSUB === 'upload') { $('#file').onchange = readFile; $('#defcls').onchange = () => { if ($('#file').files[0]) readFile(); }; }
+  if (RSUB === 'upload') { $('#file').onchange = readFile; $('#defcls').onchange = $('#defgrade').onchange = () => { if ($('#file').files[0]) readFile(); }; }
   else drawCur();
 }
+let RSHOWARCH = false;
 async function drawCur() {
   const my = ++DRAW_SEQ;
-  if ($('#cur')) $('#cur').innerHTML = `<p class="muted">${GRADE}학년 ${CLS}반 명렬표를 불러오는 중…</p>`;
-  const d = await T(`/api/t/overview?grade=${GRADE}&class=${CLS}`);
+  if ($('#cur')) $('#cur').innerHTML = `<p class="muted" role="status">${GRADE}학년 ${CLS}반 명렬표를 불러오는 중…</p>`;
+  let d; try { d = await T(`/api/t/roster-list?grade=${GRADE}&class=${CLS}`); } catch (e) { if ($('#cur')) $('#cur').innerHTML = `<div class="notice" role="alert">${esc(e.message)}</div>`; return; }
   if (my !== DRAW_SEQ || !$('#cur')) return;
-  $('#cur').innerHTML = `<table class="plain"><tr><th>번호</th><th>이름</th><th>학생 계정 ID (로그인용)</th><th></th></tr>${d.students.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td>
-    <td><input class="field small" data-ids="${s.id}" value="${esc((s.login_ids || []).join(', '))}" placeholder="ID 없음 — 로그인 불가" style="width:230px"> <button class="btn sm" data-saveid="${s.id}">ID 저장</button></td>
-    <td><button class="btn sm danger" data-del="${s.id}" data-n="${esc(s.name)}">삭제</button></td></tr>`).join('')}
-  <tr><td><input id="nno" class="field" type="number" min="1" style="width:70px" placeholder="번호"></td><td><input id="nnm" class="field" placeholder="이름"></td><td><input id="nid" class="field small" placeholder="학생 계정 ID (여러 개는 쉼표로)" style="width:230px"></td><td><button class="btn sm" id="add">추가</button></td></tr></table>
-  <p class="small muted">${GRADE}학년 ${CLS}반 ${d.students.length}명 · ID가 두 개인 학생은 쉼표로 둘 다 넣으면 둘 다 로그인돼요.</p>
-  ${(() => { const n = d.students.filter((s) => !s.login_ids || !s.login_ids.length).length; return n ? `<div class="notice">⚠️ ${CLS}반에 학생 계정 ID가 없는 학생이 ${n}명 있어요. 이 학생들은 로그인할 수 없어요. 엑셀을 다시 올리거나 위 표에 ID를 넣어 주세요.</div>` : (d.students.length ? '<div class="notice ok">✅ 모든 학생에게 학생 계정 ID가 있어요.</div>' : ''); })()}`;
-  $('#cur').querySelectorAll('[data-saveid]').forEach((b) => (b.onclick = async () => {
+  const act = d.students.filter((s) => !s.archived_at), arch = d.students.filter((s) => s.archived_at);
+  const shown = RSHOWARCH ? d.students : act;
+  $('#cur').innerHTML = `${d.upgraded ? '' : '<div class="notice" role="alert">⚠️ DB 업그레이드 전이라 보관·복원과 명렬표 저장을 쓸 수 없어요. (위 안내 참고)</div>'}
+  <div class="bar" style="margin-top:0"><label><input type="checkbox" id="showArch" ${RSHOWARCH ? 'checked' : ''}> 보관된 학생도 보기 (${arch.length}명)</label></div>
+  <table class="plain"><tr><th>번호</th><th>이름</th><th>학생 계정 ID (로그인용)</th><th>답</th><th></th></tr>${shown.map((s) => `<tr class="${s.archived_at ? 'archived' : ''}"><td>${s.number}</td><td>${esc(s.name)}${s.archived_at ? ` <span class="badge" title="${esc(new Date(s.archived_at).toLocaleString('ko-KR'))}">보관됨</span>` : ''}</td>
+    <td><label class="sr-only" for="ids${s.id}">${esc(s.name)} 학생 계정 ID</label><input class="field small" id="ids${s.id}" data-ids="${s.id}" value="${esc((s.login_ids || []).join(', '))}" placeholder="ID 없음 — 로그인 불가" style="width:230px"> <button class="btn sm" data-saveid="${s.id}">ID 저장</button></td>
+    <td class="small">${s.answers ? `${s.answers}건` : '<span class="muted">없음</span>'}</td>
+    <td>${s.archived_at ? `<button class="btn sm" data-restore="${s.id}" data-n="${esc(s.name)}">↩ 복원</button>` : `<button class="btn sm ghost" data-arch="${s.id}" data-n="${esc(s.name)}" data-a="${s.answers}">보관</button>`}${!s.answers ? ` <button class="btn sm danger" data-del="${s.id}" data-n="${esc(s.name)}" title="답 기록이 없는 학생만 지울 수 있어요">삭제</button>` : ''}</td></tr>`).join('')}
+  <tr><td><label class="sr-only" for="nno">번호</label><input id="nno" class="field" type="number" min="1" style="width:70px" placeholder="번호"></td><td><label class="sr-only" for="nnm">이름</label><input id="nnm" class="field" placeholder="이름"></td><td><label class="sr-only" for="nid">학생 계정 ID</label><input id="nid" class="field small" placeholder="학생 계정 ID (여러 개는 쉼표로)" style="width:230px"></td><td></td><td><button class="btn sm" id="add">추가</button></td></tr></table>
+  <p class="small muted">${GRADE}학년 ${CLS}반 ${act.length}명${arch.length ? ` (보관 ${arch.length}명)` : ''} · ID가 두 개인 학생은 쉼표로 둘 다 넣으면 둘 다 로그인돼요. · <b>보관</b>: 목록·로그인에서 빠지지만 답 기록은 그대로 남고 언제든 복원할 수 있어요. 삭제는 답이 하나도 없는 학생만 돼요.</p>
+  ${(() => { const n = act.filter((s) => !s.login_ids || !s.login_ids.length).length; return n ? `<div class="notice">⚠️ ${CLS}반에 학생 계정 ID가 없는 학생이 ${n}명 있어요. 이 학생들은 로그인할 수 없어요. 엑셀을 다시 올리거나 위 표에 ID를 넣어 주세요.</div>` : (act.length ? '<div class="notice ok">✅ 모든 학생에게 학생 계정 ID가 있어요.</div>' : ''); })()}`;
+  const cur = $('#cur');
+  $('#showArch').onchange = () => { RSHOWARCH = $('#showArch').checked; drawCur(); };
+  const run = async (b, fn) => { b.disabled = true; try { await fn(); } catch (e) { toast(e.message, 'error'); b.disabled = false; } };
+  cur.querySelectorAll('[data-saveid]').forEach((b) => (b.onclick = () => run(b, async () => {
     const r = await T('/api/t/student-ids', { id: +b.dataset.saveid, login_ids: $(`[data-ids="${b.dataset.saveid}"]`).value });
-    $(`[data-ids="${b.dataset.saveid}"]`).value = r.login_ids.join(', '); toast('ID를 저장했어요');
-  }));
-  $('#cur').querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
-    if (!confirm(`${b.dataset.n} 학생을 삭제할까요? 이 학생이 낸 답도 모두 지워져요.`)) return;
-    await T('/api/t/student-delete', { id: +b.dataset.del }); drawCur();
-  }));
-  $('#add').onclick = async () => {
+    $(`[data-ids="${b.dataset.saveid}"]`).value = r.login_ids.join(', '); toast('ID를 저장했어요', 'ok'); b.disabled = false;
+  })));
+  cur.querySelectorAll('[data-arch]').forEach((b) => (b.onclick = () => { if (confirm(`${b.dataset.n} 학생을 보관할까요?\n목록·로그인에서 빠지지만 답 ${b.dataset.a}건은 그대로 남고, 나중에 복원할 수 있어요.`)) run(b, async () => { await T('/api/t/student-archive', { id: +b.dataset.arch, archived: true }); toast('보관했어요', 'ok'); drawCur(); }); }));
+  cur.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = () => run(b, async () => { await T('/api/t/student-archive', { id: +b.dataset.restore, archived: false }); toast(`${b.dataset.n} 학생을 복원했어요`, 'ok'); drawCur(); })));
+  cur.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => { if (confirm(`${b.dataset.n} 학생을 명렬표에서 지울까요? (답 기록이 없는 학생만 지워져요)`)) run(b, async () => { await T('/api/t/student-delete', { id: +b.dataset.del }); drawCur(); }); }));
+  $('#add').onclick = () => run($('#add'), async () => {
     const number = +$('#nno').value, name = $('#nnm').value.trim(), ids = $('#nid').value;
-    if (!number || !name) return alert('번호와 이름을 써 주세요');
-    await T('/api/t/roster', { classes: [{ grade: GRADE, class_no: CLS, students: [{ number, name, login_ids: ids }] }] }); drawCur();
-  };
+    if (!number || !name) { $('#add').disabled = false; return alert('번호와 이름을 써 주세요'); }
+    const ex = d.students.find((s) => s.number === number);
+    if (ex && !confirm(`${number}번에는 이미 ${ex.name}${ex.archived_at ? '(보관됨)' : ''} 학생이 있어요. 이름을 ${name}(으)로 바꾸고${ex.archived_at ? ' 복원하고' : ''} 그 답 기록 ${ex.answers}건을 이어받을까요?`)) { $('#add').disabled = false; return; }
+    const r = await T('/api/t/roster', { classes: [{ grade: GRADE, class_no: CLS, students: [{ number, name, login_ids: ids }] }] });
+    toast(r.added ? '추가했어요' : '바꿨어요', 'ok'); drawCur();
+  });
 }
 const clsOf = (v) => { const s = String(v ?? ''); const m = s.match(/(\d+)\s*반/) || s.match(/-\s*(\d+)/) || s.match(/(\d+)(?!.*\d)/); const n = m ? +m[1] : NaN; return n >= 1 && n <= 15 ? n : null; };
 async function readFile() {
@@ -685,16 +903,38 @@ async function readFile() {
   const classes = Object.keys(out).sort((a, b) => a.split('-')[0] - b.split('-')[0] || a.split('-')[1] - b.split('-')[1]).map((k) => ({ grade: +k.split('-')[0], class_no: +k.split('-')[1], students: [...out[k]].sort((a, b) => a[0] - b[0]).map(([number, v]) => ({ number, name: v.name, login_ids: v.ids })) }));
   PREVIEW = classes;
   if (!classes.length) { $('#pv').innerHTML = '<div class="notice">학생을 찾지 못했어요. 첫 줄에 ‘반, 번호, 이름’ 머리글이 있는지 확인해 주세요.</div>'; return; }
-  $('#pv').innerHTML = `<div class="notice ok">${classes.map((c) => `<b>${c.grade}학년 ${c.class_no}반 ${c.students.length}명</b>`).join(' · ')} 을(를) 찾았어요. 확인하고 저장하세요.</div>
+  $('#pv').innerHTML = `<div class="notice ok">${classes.map((c) => `<b>${c.grade}학년 ${c.class_no}반 ${c.students.length}명</b>`).join(' · ')} 을(를) 찾았어요. 아래 변경 내용을 확인하고 저장하세요.</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">${classes.map((c) => `<table class="plain"><tr><th colspan="3">${c.grade}학년 ${c.class_no}반</th></tr>${c.students.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td><td class="small">${s.login_ids ? s.login_ids.map(esc).join('<br>') : '<span class="muted">ID 없음</span>'}</td></tr>`).join('')}</table>`).join('')}</div>
-    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? '<div class="notice">⚠️ 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요.</div>' : ''}
-    <label class="bar" style="cursor:pointer"><input type="checkbox" id="replaceR" checked> <span><b>반 전체 바꾸기</b> — 이 파일에 있는 반은, 파일에 없는 번호의 학생을 지워요 (그 학생이 낸 답도 지워짐). 번호가 바뀐 새 명렬표를 올릴 때 켜 두세요.</span></label>
-    <div class="bar"><button class="btn pri" id="saveR">명렬표 저장</button></div>`;
+    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? '<div class="notice">⚠️ 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요. (이미 ID가 있는 학생은 그대로 둬요)</div>' : ''}
+    <label class="bar" style="cursor:pointer"><input type="checkbox" id="replaceR"> <span><b>반 전체 바꾸기</b> — 이 파일에 있는 반에서 파일에 없는 번호의 학생을 <b>보관</b>해요 (지우지 않음, 답 기록은 남고 나중에 복원 가능). 학생이 전학 가거나 번호가 바뀐 새 명렬표를 올릴 때만 켜세요.</span></label>
+    <div id="diff" aria-live="polite"><p class="muted small">변경 내용을 계산하는 중…</p></div>
+    <div class="bar"><button class="btn pri" id="saveR" disabled>명렬표 저장</button></div>`;
+  let PV = null, seq = 0;
+  const list = (xs, f) => xs.length ? `<ul class="small" style="margin:4px 0 8px">${xs.slice(0, 30).map(f).join('')}${xs.length > 30 ? `<li class="muted">외 ${xs.length - 30}명</li>` : ''}</ul>` : '';
+  const preview = async () => {
+    const my = ++seq, archive = $('#replaceR').checked; $('#saveR').disabled = true;
+    let r; try { r = await T('/api/t/roster-preview', { classes: PREVIEW, archive }); } catch (e) { $('#diff').innerHTML = `<div class="notice" role="alert">${esc(e.message)}</div>`; return; }
+    if (my !== seq || !$('#diff')) return;
+    PV = r;
+    $('#diff').innerHTML = `${r.upgraded ? '' : '<div class="notice" role="alert">⚠️ DB 업그레이드 전이라 저장할 수 없어요. 위 안내대로 업그레이드 SQL을 먼저 실행해 주세요.</div>'}
+      ${r.classes.map((c) => `<div class="card" style="margin:8px 0"><b>${c.grade}학년 ${c.class_no}반</b> <span class="small muted">파일 ${c.total}명 · 그대로 ${c.same}명</span>
+        <div class="small"><span class="diff-add">➕ 추가 ${c.add.length}명</span> · <span class="diff-upd">✏️ 이름·ID 바뀜 ${c.update.length}명</span>${c.restore.length ? ` · <span class="diff-add">↩ 보관 해제 ${c.restore.length}명</span>` : ''} · <span class="diff-arch">📦 보관 ${c.archive.length}명</span></div>
+        ${list(c.add, (s) => `<li class="diff-add">${s.number}번 ${esc(s.name)}</li>`)}
+        ${list(c.update, (s) => `<li class="diff-upd">${s.number}번 ${s.nameChanged ? `${esc(s.from)} → <b>${esc(s.name)}</b>` : esc(s.name)}${s.idsChanged ? ' (ID 바뀜)' : ''}${s.answers ? ` — <b>답 ${s.answers}건을 이어받음</b>${s.nameChanged ? ' ⚠️ 다른 학생이면 확인' : ''}` : ''}</li>`)}
+        ${list(c.restore, (s) => `<li class="diff-add">${s.number}번 ${s.nameChanged ? `${esc(s.from)} → <b>${esc(s.name)}</b>` : esc(s.name)} (보관 → 다시 사용${s.answers ? `, 답 ${s.answers}건` : ''})</li>`)}
+        ${list(c.archive, (s) => `<li class="diff-arch">${s.number}번 ${esc(s.name)} — 보관 (답 ${s.answers}건은 그대로 남음)</li>`)}</div>`).join('')}`;
+    $('#saveR').disabled = !r.upgraded;
+  };
+  $('#replaceR').onchange = preview;
+  preview();
   $('#saveR').onclick = async () => {
-    const replace = $('#replaceR').checked;
-    if (replace && !confirm('파일에 없는 번호의 학생은 지워져요. 계속할까요?')) return;
-    const r = await T('/api/t/roster', { classes: PREVIEW, replace });
-    toast(`${r.count}명 저장했어요 (ID 있는 학생 ${r.withIds}명${r.removed ? `, 지운 학생 ${r.removed}명` : ''})`); $('#pv').innerHTML = ''; $('#file').value = ''; CLS = PREVIEW[0].class_no; GRADE = PREVIEW[0].grade; localStorage.setItem('eng4-grade', GRADE); for (const c of PREVIEW) CLASS_COUNT[c.grade] = Math.max(CLASS_COUNT[c.grade] || 0, c.class_no); RSUB = 'list'; roster();
+    if (!PV) return;
+    const archive = $('#replaceR').checked, t = (k) => PV.classes.reduce((a, c) => a + c[k].length, 0), arch = t('archive'), upd = PV.classes.reduce((a, c) => a + c.update.filter((s) => s.nameChanged && s.answers).length, 0);
+    if (!confirm(`명렬표를 저장할까요?\n- 추가 ${t('add')}명 · 이름·ID 바뀜 ${t('update')}명 · 보관 해제 ${t('restore')}명 · 보관 ${arch}명${upd ? `\n\n⚠️ 이름이 바뀌면서 이전 답을 이어받는 학생이 ${upd}명 있어요.` : ''}${arch ? `\n\n보관된 학생은 목록·로그인에서 빠지지만 답 기록은 그대로 남아요.` : ''}`)) return;
+    $('#saveR').disabled = true;
+    let r; try { r = await T('/api/t/roster', { classes: PREVIEW, archive }); } catch (e) { toast(e.message, 'error'); $('#saveR').disabled = false; return; }
+    toast(`${r.count}명 저장했어요 (추가 ${r.added} · 바뀜 ${r.updated}${r.restored ? ` · 보관 해제 ${r.restored}` : ''}${r.archived ? ` · 보관 ${r.archived}` : ''})`, 'ok');
+    $('#pv').innerHTML = ''; $('#file').value = ''; CLS = PREVIEW[0].class_no; GRADE = PREVIEW[0].grade; localStorage.setItem('eng4-grade', GRADE); for (const c of PREVIEW) CLASS_COUNT[c.grade] = Math.max(CLASS_COUNT[c.grade] || 0, c.class_no); RSUB = 'list'; roster();
   };
 }
 
@@ -723,8 +963,8 @@ function bindCopy(root) {
 }
 // QR 크게 보기 (교실 화면에 띄우기 좋게)
 function zoomQR(c) {
-  const u = testUrl(c.id), m = $('#modal');
-  m.innerHTML = `<div class="modal qrzoom" id="bg"><div class="box">
+  const u = testUrl(c.id), sh = shell('QR 크게 보기', null, () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }), m = sh.m;
+  m.innerHTML = `<div class="modal qrzoom"><div class="box">
     <div class="qz-top">${GRADE}학년 2학기 영어 ${CLOSED.has(c.id) ? '<span class="badge no">🔒 지금 닫혀 있어요</span>' : ''}</div>
     <div class="qz-title">${esc(c.kind === 'concept' ? `개념 ${c.id} · ${c.title}` : c.title)}</div>
     <div class="qz-qr">${qrSVG(u, 10)}</div>
@@ -733,11 +973,7 @@ function zoomQR(c) {
     <div class="bar" style="justify-content:center"><button class="btn pri" data-copyurl="${u}">📋 링크 복사</button><button class="btn" id="qzFull">⛶ 전체 화면</button><button class="btn" id="x">닫기 (Esc)</button></div>
   </div></div>`;
   bindCopy(m);
-  const close = () => { m.innerHTML = ''; document.removeEventListener('keydown', esc1); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
-  const esc1 = (e) => { if (e.key === 'Escape') close(); };
-  document.addEventListener('keydown', esc1);
-  $('#x').onclick = close;
-  $('#bg').onclick = (e) => { if (e.target.id === 'bg') close(); };
+  $('#x').onclick = () => sh.close();
   $('#qzFull').onclick = () => { const el = m.querySelector('.box'); (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen()).catch(() => {}); };
 }
 function linksView() {
