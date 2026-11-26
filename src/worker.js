@@ -145,10 +145,10 @@ export default {
       }
       if (p === '/api/me') {
         const st = await studentFrom(env, req);
-        const subs = await sb(env, `submissions?select=concept,status,auto,overrides,submitted_at,attempt&student_id=eq.${st.id}`);
+        const subs = await sb(env, `submissions?select=concept,status,auto,overrides,feedback,submitted_at,attempt&student_id=eq.${st.id}`);
         const hist = await sb(env, `submission_history?select=concept,attempt&student_id=eq.${st.id}`);
         const retake = {}; for (const h of hist) retake[h.concept] = Math.max(retake[h.concept] || 0, h.attempt);
-        return json({ student: st, retake, submissions: subs.map((s) => ({ concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt, score: s.status === 'graded' ? marksOf(s).filter(Boolean).length : null })) });
+        return json({ student: st, retake, submissions: subs.map((s) => ({ concept: s.concept, status: s.status, submitted_at: s.submitted_at, attempt: s.attempt, score: s.status === 'graded' ? marksOf(s).filter(Boolean).length : null, note: s.status === 'graded' && !!s.feedback })) });
       }
       if (p === '/api/summary') {
         const st = await studentFrom(env, req);

@@ -114,6 +114,8 @@ function resultItemsHTML(c, sub, correct) {
       <div class="fb">내 답: <b>${optLabel(mine) || '<span class="muted">(빈칸)</span>'}</b>${optPic(q, sub.answers[i])}${ok ? '' : ` &nbsp;→&nbsp; 정답: <span class="right">${optLabel(correct[i])}</span>${optPic(q, q.a ?? correct[i])}`}</div></div>`;
   }).join('');
 }
+// 선생님 말씀 카드 (결과 화면·출력 공통)
+const teacherNoteHTML = (fb) => (fb ? `<div class="tnote"><div class="tnh">👩‍🏫 선생님이 남긴 말</div><p>${esc(fb).replace(/\n/g, '<br>')}</p></div>` : '');
 // 한 학생의 결과 모음 (parts: [{c, sub, correct}])
 function studentReportHTML(st, parts, detail, gradeLabel) {
   const total = parts.reduce((a, p) => a + p.sub.score, 0), max = parts.reduce((a, p) => a + p.c.questions.length, 0);
@@ -121,7 +123,7 @@ function studentReportHTML(st, parts, detail, gradeLabel) {
       <div class="rmeta">${who(st)} · ${fmtDate(new Date())} 출력</div>
       <div class="rscore">${max ? Math.round(total / max * 100) : 0}<small>%</small></div></div>
     <table class="plain rsum"><tr><th>시험</th><th>점수</th><th>채점일</th></tr>${parts.map(({ c, sub, hist }) => `<tr><td>${esc(setTitle(c))}</td><td>${(hist || []).map((h) => `<span class="muted">${h.attempt}차 ${h.score} → </span>`).join('')}<b>${sub.score}</b> / ${c.questions.length}${sub.attempt > 1 ? ` <span class="small">(${sub.attempt}차)</span>` : ''}</td><td>${fmtDate(sub.graded_at) || '<span class="muted">채점 대기</span>'}</td></tr>`).join('')}</table>
-    ${detail ? parts.map(({ c, sub, correct }) => `<section class="rsec">${resultHeadHTML(c, sub, st)}${sub.feedback ? `<div class="notice ok">💬 선생님 말씀: ${esc(sub.feedback)}</div>` : ''}${resultItemsHTML(c, sub, correct)}</section>`).join('') : ''}`;
+    ${detail ? parts.map(({ c, sub, correct }) => `<section class="rsec">${resultHeadHTML(c, sub, st)}${teacherNoteHTML(sub.feedback)}${resultItemsHTML(c, sub, correct)}</section>`).join('') : ''}`;
 }
 // el 부분만 인쇄 (그림을 다 불러온 뒤)
 function printOnly(el) {

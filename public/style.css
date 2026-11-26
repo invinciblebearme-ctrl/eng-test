@@ -297,3 +297,12 @@ button.lkqr:hover .zoomhint{opacity:1}
 .an-t td,.an-t th{vertical-align:middle}
 .an-t .wa{display:inline-block;background:#FBF8F3;border:1px solid var(--line);border-radius:8px;padding:1px 7px;margin:1px 2px}
 .an-t .wa b{color:var(--no)}
+
+/* 선생님 말씀 카드 */
+.tnote{position:relative;margin:14px 0 18px;padding:18px 22px 18px 24px;background:#FFF4EC;border:2px solid #F2A47F;border-left:8px solid var(--acc);border-radius:16px}
+.tnote .tnh{font-weight:800;font-size:17px;color:var(--acc);margin-bottom:6px}
+.tnote p{margin:0;font-size:19px;line-height:1.75;color:#2A2623;word-break:keep-all}
+.tnote.pop{animation:tnpop .6s cubic-bezier(.2,.75,.2,1) both}
+@keyframes tnpop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.badge.note{background:#FFF4EC;color:var(--acc);border:1px solid #F2A47F}
+@media print{.tnote{background:#fff;border:2px solid #999;border-left:8px solid #555}.tnote .tnh{color:#333}.tnote p{font-size:14px}}

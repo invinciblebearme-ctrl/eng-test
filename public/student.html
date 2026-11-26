@@ -134,7 +134,7 @@ function login(msg) {
 function statusBadge(s, c) {
   if (!s) return '<span class="badge">아직 안 풀었어요</span>';
   const n = c.questions.length;
-  if (s.status === 'graded') return `<span class="badge ${s.score >= n * 0.8 ? 'ok' : 'no'}">채점 완료 · ${s.score}/${n}</span>`;
+  if (s.status === 'graded') return `<span class="badge ${s.score >= n * 0.8 ? 'ok' : 'no'}">채점 완료 · ${s.score}/${n}</span>${s.note ? ' <span class="badge note">💬 선생님 말씀</span>' : ''}`;
   return '<span class="badge wait">제출함 · 채점 기다리는 중</span>';
 }
 const tileHTML = (c) => `<button class="tile${c.open === false && !SUBS[c.id] ? ' closed' : ''}" data-k="${c.id}"><span class="num">${c.kind === 'concept' ? `개념 ${c.id} · ${esc(c.unit)}` : `${c.kind === 'word' ? '🔤 단어 시험' : c.kind === 'spelltest' ? '✍️ 철자 시험' : '📝 단원평가'} · ${c.questions.length}문제`}</span><div class="ttl">${esc(c.title)}</div>${c.open === false && !SUBS[c.id] ? '<span class="badge">🔒 아직 열리지 않았어요</span>' : statusBadge(SUBS[c.id], c)}${!SUBS[c.id] && RETAKE[c.id] && c.open !== false ? ` <span class="badge wait">🔁 ${RETAKE[c.id] + 1}차 다시 풀기</span>` : SUBS[c.id] && SUBS[c.id].attempt > 1 ? ` <span class="badge">${SUBS[c.id].attempt}차</span>` : ''}</button>`;
@@ -258,10 +258,11 @@ function renderInput(q, i, ans, el) {
 
 // ---------- 결과 보기·출력 ----------
 function showResult(c, sub, qa) {
-  const fb = sub.feedback ? `<div class="notice ok">💬 선생님 말씀: ${esc(sub.feedback)}</div>` : '';
+  const fb = teacherNoteHTML(sub.feedback);
   const wrong = (sub.marks || []).map((m, i) => (m || c.questions[i].pending ? -1 : i)).filter((i) => i >= 0);
   qa.innerHTML = `<div class="bar noprint" style="margin-top:24px"><h2 style="margin:0;flex:1">✅ 채점 결과: ${sub.score} / ${c.questions.length}</h2>${wrong.length ? `<button class="btn" id="retry">🔁 틀린 문제 다시 풀기 (${wrong.length}문제)</button> ` : ''}<button class="btn pri" id="prt">🖨 결과 출력하기</button></div>
     <div class="result">${resultHeadHTML(c, sub, ME)}${fb}${resultItemsHTML(c, sub, sub.correct)}</div>`;
+  if (fb) setTimeout(() => { const n = qa.querySelector('.tnote'); if (n) n.classList.add('pop'); }, 50);
   qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
   $('#prt').onclick = () => printOnly(qa.querySelector('.result'));
   if (wrong.length) $('#retry').onclick = () => retryQuiz(c, sub, wrong, qa);
