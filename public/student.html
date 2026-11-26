@@ -267,22 +267,22 @@ async function previewMode(id) {
   const c = key.find((x) => x.id === id); if (!c) { app.innerHTML = '<div class="notice">시험을 찾을 수 없어요.</div>'; return; }
   c.questions.forEach((q) => { if (q.t === 'multi') q.blanks = q.a.length; });
   const same = key.filter((x) => x.grade === c.grade);
-  $('#ttl').textContent = `${c.grade}학년 2학기 영어 · 👀 교사 미리보기`;
+  $('#ttl').textContent = `${c.grade}학년 2학기 영어 · 교사 미리보기`;
   document.title = '미리보기 · ' + c.title;
   const ans = c.questions.map(blankAnswerFor);
-  app.innerHTML = `<div class="pvbar"><span class="pvt"><b>👀 교사 미리보기</b> · 풀어 볼 수 있지만 <b>제출·저장되지 않아요</b></span>
+  app.innerHTML = `<div class="pvbar"><span class="pvt"><b>${ico('eye', 15)} 교사 미리보기</b> · 풀어 볼 수 있지만 <b>제출·저장되지 않아요</b></span>
       <select id="pvSel" class="field" aria-label="미리보기 시험 선택">${same.map((x) => `<option value="${x.id}" ${x.id === id ? 'selected' : ''}>${esc(x.kind === 'concept' ? `개념 ${x.id} · ${x.title}` : x.title)}</option>`).join('')}</select></div>
     <h2><span class="dag">†</span> ${c.kind === 'concept' ? '개념 ' + c.id + ' · ' : ''}${esc(c.title)}</h2><p class="lead">${esc(c.lead || '')}</p>
-    <div class="notice small">🔒 학생에게는 아래 정리가 <b>문제를 낸 뒤에만</b> 보여요. (교사 미리보기라서 보임)</div>
+    <div class="notice small">${ico('lock', 14)} 학생에게는 아래 정리가 <b>문제를 낸 뒤에만</b> 보여요. (교사 미리보기라서 보임)</div>
     <div id="sum">${fillSummary(c.summary)}</div>
-    <h2 style="margin-top:28px">✏️ ${c.kind === 'concept' ? '확인 문제' : esc(c.title)} <span class="muted small">(${c.questions.length}문제)</span></h2>
+    <h2 style="margin-top:28px">${ico('pen', 20)} ${c.kind === 'concept' ? '확인 문제' : esc(c.title)} <span class="muted small">(${c.questions.length}문제)</span></h2>
     <div id="qarea">${c.questions.map((q, i) => `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div><div class="mark"></div></div>${mediaHTML(q)}<div class="ans"></div><div class="fb pvans" hidden>정답: <span class="right">${optLabel(q.answerText)}</span></div></div>`).join('')}</div>
-    <div class="sticky-foot"><button class="btn pri" id="pvTry">✅ 채점해 보기</button> <button class="btn" id="pvKey">👁 정답 보기</button> <button class="btn ghost" id="pvReset">↺ 지우기</button></div>`;
+    <div class="sticky-foot"><button class="btn pri" id="pvTry">${ico('check', 16)} 채점해 보기</button> <button class="btn" id="pvKey">${ico('eye', 16)} 정답 보기</button> <button class="btn ghost" id="pvReset">↺ 지우기</button></div>`;
   bindSpeak($('#sum'));
   app.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
   c.questions.forEach((q, i) => renderInput(q, i, ans, app.querySelector(`#q${i} .ans`)));
   $('#pvSel').onchange = () => { location.search = '?preview=' + $('#pvSel').value; };
-  $('#pvKey').onclick = () => { const show = $('#pvKey').textContent.includes('보기'); app.querySelectorAll('.pvans').forEach((x) => (x.hidden = !show)); $('#pvKey').textContent = show ? '🙈 정답 숨기기' : '👁 정답 보기'; };
+  $('#pvKey').onclick = () => { const show = $('#pvKey').textContent.includes('보기'); app.querySelectorAll('.pvans').forEach((x) => (x.hidden = !show)); $('#pvKey').innerHTML = show ? `${ico('eyeOff', 16)} 정답 숨기기` : `${ico('eye', 16)} 정답 보기`; };
   $('#pvReset').onclick = () => previewMode(id);
   $('#pvTry').onclick = async () => {
     const r = await api('/api/t/try', { concept: id, answers: ans }, tt);
@@ -357,7 +357,7 @@ function showBookmarkHelp() {
           const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select();
           try { ok = document.execCommand('copy'); } catch {} ta.remove();
         }
-        ok ? toast('주소를 복사했어요 📋') : prompt('이 주소를 복사하세요', url);
+        ok ? toast('주소를 복사했어요') : prompt('이 주소를 복사하세요', url);
       };
     },
   });
@@ -543,7 +543,7 @@ async function concept(id) {
 }
 
 function quiz(c, prev, seq = VIEW_SEQ) {
-  if (c.hidden) $('#sum').innerHTML = `<div class="notice">🔒 ${c.kind === 'concept' ? '문제를 푸는' : '시험 보는'} 동안에는 정리를 볼 수 없어요.</div>`;
+  if (c.hidden) $('#sum').innerHTML = `<div class="notice">${ico('lock', 15)} ${c.kind === 'concept' ? '문제를 푸는' : '시험 보는'} 동안에는 정리를 볼 수 없어요.</div>`;
   const attempt = currentAttempt(c.id);
   const draftCheck = ME ? loadDraft(ME.id, c, attempt) : { status: 'none' };
   const makeInitial = (base) => c.questions.map((q, i) => (base && base[i] != null ? structuredClone(base[i]) : blankAnswerFor(q)));
@@ -644,7 +644,7 @@ function quiz(c, prev, seq = VIEW_SEQ) {
       setDraftSaveFailed(false);
       if (ME) clearDraft(ME.id, c.id, attempt);
       SUBS[c.id] = { concept: c.id, status: 'submitted', submitted_at: new Date().toISOString(), attempt };
-      toast('제출했어요! 🎉');
+      toast('제출했어요!');
       try { await loadMe(); } catch { toast('제출은 완료됐어요! 목록을 새로고침해 주세요.'); }
       if (seq === VIEW_SEQ) concept(c.id);
     } catch (e) {
@@ -788,11 +788,11 @@ function showResult(c, sub, qa) {
 function retryQuiz(c, sub, left, qa, round = 1) {
   const seq = VIEW_SEQ;
   const ans = c.questions.map(blankAnswerFor);
-  $('#sum').innerHTML = '<div class="notice">🔒 다시 푸는 동안에는 정리를 볼 수 없어요.</div>';
-  qa.innerHTML = `<div class="bar" style="margin-top:24px"><h2 style="margin:0;flex:1">🔁 틀린 문제 다시 풀기${round > 1 ? ` · ${round}번째` : ''} <span class="muted small">(${left.length}문제)</span></h2><button type="button" class="btn sm" id="rtBack">← 결과로</button></div>
+  $('#sum').innerHTML = `<div class="notice">${ico('lock', 15)} 다시 푸는 동안에는 정리를 볼 수 없어요.</div>`;
+  qa.innerHTML = `<div class="bar" style="margin-top:24px"><h2 style="margin:0;flex:1">${ico('retry', 20)} 틀린 문제 다시 풀기${round > 1 ? ` · ${round}번째` : ''} <span class="muted small">(${left.length}문제)</span></h2><button type="button" class="btn sm" id="rtBack">← 결과로</button></div>
     <div class="notice small">연습이에요. 다시 풀어도 <b>점수는 바뀌지 않아요.</b> 모두 맞힐 때까지 도전해 보세요!</div>` +
     left.map((i) => { const q = c.questions[i]; return `<div class="q" id="q${i}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}</div><div class="mark"></div></div>${mediaHTML(q)}<div class="ans"></div></div>`; }).join('') +
-    `<div class="sticky-foot"><button type="button" class="btn pri" id="rtGo">✅ 확인하기</button></div>`;
+    `<div class="sticky-foot"><button type="button" class="btn pri" id="rtGo">${ico('check', 16)} 확인하기</button></div>`;
   qa.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => speak(b.dataset.say)));
   left.forEach((i) => renderInput(c.questions[i], i, ans, qa.querySelector(`#q${i} .ans`)));
   $('#rtBack').onclick = () => concept(c.id);
@@ -805,7 +805,7 @@ function retryQuiz(c, sub, left, qa, round = 1) {
     catch (e) { if (seq === VIEW_SEQ) { alert(e.message); $('#rtGo').disabled = false; } return; }
     if (seq !== VIEW_SEQ) return;
     const still = left.filter((i) => !marks[i]);
-    left.forEach((i) => { const m = qa.querySelector(`#q${i} .mark`); m.textContent = marks[i] ? '⭕' : '❌'; m.className = 'mark ' + (marks[i] ? 'ok' : 'no'); });
+    left.forEach((i) => { const m = qa.querySelector(`#q${i} .mark`); m.innerHTML = marks[i] ? ico('check', 26) : ico('x', 26); m.className = 'mark ' + (marks[i] ? 'ok' : 'no'); });
     const foot = qa.querySelector('.sticky-foot');
     if (!still.length) {
       foot.innerHTML = `<div class="notice ok" style="margin:0;display:inline-flex;align-items:center;gap:8px"><img class="illus illus-badge" src="/img/badge-celebrate.jpg" alt=""><span>모두 맞혔어요! 정말 잘했어요.</span></div> <button type="button" class="btn" id="rtEnd">← 결과로</button>`;

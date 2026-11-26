@@ -36,7 +36,7 @@ const THEME_META = [
   { id: 'dual', name: '듀얼 톤', desc: '학생 학습지 · 교사 슬레이트', sw: ['#f4f7fb', '#ffffff', '#2563eb'] },
   { id: 'playful', name: '초등 교실', desc: '코발트 · 3D 눌림 버튼', sw: ['#fffdf7', '#eff6ff', '#2563eb'] },
   { id: 'crisp', name: '고대비 집중', desc: '교실 프로젝터 · 뚜렷한 테두리', sw: ['#f3f4f6', '#ffffff', '#ea580c'] },
-  { id: 'dark', name: '🌙 야간 다크', desc: '저녁 채점용 (교사 전용)', sw: ['#0f172a', '#1e293b', '#fb923c'], teacherOnly: true },
+  { id: 'dark', name: '야간 다크', desc: '저녁 채점용 (교사 전용)', sw: ['#0f172a', '#1e293b', '#fb923c'], teacherOnly: true },
 ];
 function applyTeacherTheme(id) {
   const t = THEME_META.some((x) => x.id === id) ? id : 'default';
@@ -74,7 +74,7 @@ async function openThemeModal() {
       statusMsg(stEl, '✓ 모든 학생 화면에 적용됐어요', 'saved');
       toast('학생 화면 테마를 바꿨어요', 'ok');
     } catch (e) {
-      statusMsg(stEl, '⚠️ ' + e.message, 'error');
+      statusMsg(stEl, e.message, 'error');
       toast(e.message, 'error');
     }
   }));
@@ -100,7 +100,7 @@ async function boot() {
   await loadClosed();
   $('#nav').hidden = false; $('#out').hidden = false; $('#themeBtn').hidden = false; go('grades');
   // DB 업그레이드 확인 (안 됐으면 저장 기능이 멈추므로 위에 계속 알림)
-  T('/api/t/schema').then((r) => { $('#sysSchema').innerHTML = r.ok ? '' : `<div class="notice" role="alert">⚠️ ${esc(r.message)}</div>`; }).catch(() => {});
+  T('/api/t/schema').then((r) => { $('#sysSchema').innerHTML = r.ok ? '' : `<div class="notice" role="alert">${ico('warn', 15)} ${esc(r.message)}</div>`; }).catch(() => {});
   checkErrors(); setInterval(() => { if (TOKEN && !document.hidden) checkErrors(); }, 5 * 60000);
 }
 // ---------------- ⚠️ 서버·화면 오류 알림 (최근 24시간, '확인함' 이후 새로 생긴 것만) ----------------
@@ -114,7 +114,7 @@ async function checkErrors() {
   const fresh = ERRS.items.filter((x) => x.id > errSeen());
   if (!fresh.length) { el.innerHTML = ''; return; }
   const last = fresh[0], src = { server: '서버', teacher: '교사 화면', student: '학생 화면' };
-  el.innerHTML = `<div class="notice" role="alert">⚠️ 최근 24시간에 새 오류 <b>${fresh.length}${fresh.length >= 50 ? '+' : ''}건</b> — 마지막: ${new Date(last.at).toLocaleString('ko-KR')} · ${src[last.source] || last.source} · ${esc(last.path || '')} ${esc((last.message || '').slice(0, 80))}
+  el.innerHTML = `<div class="notice" role="alert">${ico('warn', 15)} 최근 24시간에 새 오류 <b>${fresh.length}${fresh.length >= 50 ? '+' : ''}건</b> — 마지막: ${new Date(last.at).toLocaleString('ko-KR')} · ${src[last.source] || last.source} · ${esc(last.path || '')} ${esc((last.message || '').slice(0, 80))}
     <button class="btn sm" id="errMore">자세히</button> <button class="btn sm ghost" id="errOk">확인함</button></div>`;
   $('#errOk').onclick = () => { try { localStorage.setItem(ERR_SEEN_KEY, String(ERRS.items[0].id)); } catch {} el.innerHTML = ''; };
   $('#errMore').onclick = () => openErrors();
@@ -122,8 +122,8 @@ async function checkErrors() {
 function openErrors() {
   const sh = shell('최근 오류'), src = { server: '서버', teacher: '교사 화면', student: '학생 화면' }, seen = errSeen();
   sh.m.innerHTML = `<div class="modal"><div class="box">
-    <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">⚠️ 최근 24시간 오류 (${ERRS.count}건${ERRS.count > 50 ? ', 최근 50건만' : ''})</b><button class="btn sm" id="x">닫기</button></div>
-    <p class="small muted">같은 오류는 1분에 한 번만 기록돼요. 30일 지난 기록은 자동으로 지워져요. ${ERRS.telegram ? '📨 텔레그램 알림 켜짐' : '텔레그램 알림은 꺼져 있어요 (Cloudflare 비밀값 TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID를 넣으면 켜짐)'}</p>
+    <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${ico('warn', 18)} 최근 24시간 오류 (${ERRS.count}건${ERRS.count > 50 ? ', 최근 50건만' : ''})</b><button class="btn sm" id="x">닫기</button></div>
+    <p class="small muted">같은 오류는 1분에 한 번만 기록돼요. 30일 지난 기록은 자동으로 지워져요. ${ERRS.telegram ? `${ico('bell', 14)} 텔레그램 알림 켜짐` : '텔레그램 알림은 꺼져 있어요 (Cloudflare 비밀값 TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID를 넣으면 켜짐)'}</p>
     <table class="plain small"><tr><th>시각</th><th>어디</th><th>주소</th><th>상태</th><th>내용</th></tr>${ERRS.items.map((x) => `<tr class="${x.id > seen ? '' : 'muted'}"><td style="white-space:nowrap">${new Date(x.at).toLocaleString('ko-KR')}</td><td>${src[x.source] || esc(x.source)}</td><td>${esc(x.method || '')} ${esc(x.path || '')}</td><td>${x.status ?? ''}</td><td>${esc(x.message || '')}</td></tr>`).join('')}</table>
   </div></div>`;
   $('#x').onclick = () => sh.close();
@@ -162,14 +162,14 @@ async function runAI(ids) {
     AIJOB.queue.shift(); AIJOB.done++; aiRender();
   }
   AIJOB.running = false; aiRender();
-  toast(`🤖 AI 제안 ${AIJOB.ok}건 완료${AIJOB.failed.length ? ` · 실패 ${AIJOB.failed.length}건` : ''}${AIJOB.queue.length ? ` · 남은 ${AIJOB.queue.length}건 (중지됨)` : ''}`, AIJOB.failed.length ? 'error' : 'ok');
+  toast(`AI 제안 ${AIJOB.ok}건 완료${AIJOB.failed.length ? ` · 실패 ${AIJOB.failed.length}건` : ''}${AIJOB.queue.length ? ` · 남은 ${AIJOB.queue.length}건 (중지됨)` : ''}`, AIJOB.failed.length ? 'error' : 'ok');
   if (VIEW === 'grades' && !$('#modal').innerHTML) drawGrades(true);
 }
 function aiRender() {
   const el = $('#aijob'); if (!el) return;
   const j = AIJOB;
-  if (j.running) el.innerHTML = `🤖 AI 제안 ${j.done}/${j.total}${j.failed.length ? ` · 실패 ${j.failed.length}` : ''} <button class="btn sm ghost" id="aiStop" ${j.stop ? 'disabled' : ''}>${j.stop ? '멈추는 중…' : '⏸ 중지'}</button>`;
-  else if (j.queue.length || j.failed.length) el.innerHTML = `🤖 ${j.note ? esc(j.note) + ' · ' : ''}${j.queue.length ? `남은 ${j.queue.length}건 <button class="btn sm" id="aiResume">▶ 이어서</button>` : ''}${j.failed.length ? ` 실패 ${j.failed.length}건 <button class="btn sm" id="aiRetry" title="${esc(j.failed.slice(0, 5).map((f) => f.msg).join('\n'))}">↻ 실패만 다시</button>` : ''} <button class="btn sm ghost" id="aiClear" aria-label="AI 작업 알림 닫기">✕</button>`;
+  if (j.running) el.innerHTML = `${ico('sparkle', 14)} AI 제안 ${j.done}/${j.total}${j.failed.length ? ` · 실패 ${j.failed.length}` : ''} <button class="btn sm ghost" id="aiStop" ${j.stop ? 'disabled' : ''}>${j.stop ? '멈추는 중…' : '${ico('pause', 12)} 중지'}</button>`;
+  else if (j.queue.length || j.failed.length) el.innerHTML = `${ico('sparkle', 14)} ${j.note ? esc(j.note) + ' · ' : ''}${j.queue.length ? `남은 ${j.queue.length}건 <button class="btn sm" id="aiResume">${ico('play', 12)} 이어서</button>` : ''}${j.failed.length ? ` 실패 ${j.failed.length}건 <button class="btn sm" id="aiRetry" title="${esc(j.failed.slice(0, 5).map((f) => f.msg).join('\n'))}">↻ 실패만 다시</button>` : ''} <button class="btn sm ghost" id="aiClear" aria-label="AI 작업 알림 닫기">✕</button>`;
   else el.innerHTML = '';
   if ($('#aiStop')) $('#aiStop').onclick = () => { j.stop = true; aiRender(); };
   if ($('#aiResume')) $('#aiResume').onclick = () => runAI(j.queue);
@@ -239,7 +239,7 @@ function rvSvHTML(r) {
   if (sv.state === 'saved') return '<span class="st st-saved">✓ 저장됨</span>';
   if (sv.state === 'dirty') return '<span class="st st-saving">✎ 저장 대기…</span>';
   if (sv.state === 'saving') return '<span class="st st-saving">저장 중…</span>';
-  return `<span class="st st-error" role="alert">⚠️ 저장 실패: ${esc(sv.err)}</span> ${sv.conflict ? `<button class="btn sm" data-reload="${r.id}">↻ 새로 불러오기</button>` : `<button class="btn sm" data-retry="${r.id}">다시 저장</button> <button class="btn sm ghost" data-revert="${r.id}">되돌리기</button>`}`;
+  return `<span class="st st-error" role="alert">${ico('warn', 14)} 저장 실패: ${esc(sv.err)}</span> ${sv.conflict ? `<button class="btn sm" data-reload="${r.id}">↻ 새로 불러오기</button>` : `<button class="btn sm" data-retry="${r.id}">다시 저장</button> <button class="btn sm ghost" data-revert="${r.id}">되돌리기</button>`}`;
 }
 function rvTag(r) {
   const box = document.querySelector(`[data-svbox="${r.id}"]`); if (box) box.innerHTML = rvSvHTML(r);
@@ -251,7 +251,7 @@ function rvHead() {
   if (!RV.data) return;
   const un = rvUnsaved(RV.data), err = un.filter((r) => r._sv.state === 'error');
   const el = $('#rvUnsaved');
-  if (el) el.innerHTML = err.length ? `<span class="st st-error" role="alert">⚠️ 저장 실패 ${err.length}건</span> <button class="btn sm" id="rvRetryAll">모두 다시 저장</button>` : un.length ? `<span class="st st-saving">저장 중 ${un.length}건…</span>` : '';
+  if (el) el.innerHTML = err.length ? `<span class="st st-error" role="alert">${ico('warn', 14)} 저장 실패 ${err.length}건</span> <button class="btn sm" id="rvRetryAll">모두 다시 저장</button>` : un.length ? `<span class="st st-saving">저장 중 ${un.length}건…</span>` : '';
   if ($('#rvRetryAll')) $('#rvRetryAll').onclick = () => err.filter((r) => !r._sv.conflict).forEach((r) => rvFlush(r));
   const selUn = un.filter((r) => RV.sel.has(r.id)).length;
   ['rvGo', 'rvPub'].forEach((id) => { const b = $('#' + id); if (!b) return; if (selUn) { b.disabled = true; b.title = '저장되지 않은 카드가 있어요. 저장이 끝나야 확정·공개할 수 있어요'; } else { b.disabled = b.dataset.off === '1'; b.title = ''; } });
@@ -261,10 +261,10 @@ async function reviewView() {
   const sets = KG();
   app.innerHTML = `<div id="todayBox"></div><div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs"><button class="tab ${RV.cls === 0 ? 'on' : ''}" data-rcls="0">전체 반</button>${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === RV.cls ? 'on' : ''}" data-rcls="${n}">${n}반</button>`).join('')}</div></div>
     <div class="bar view" style="flex-wrap:wrap;gap:8px">
-      <label class="sr-only" for="rvSet">시험</label><select id="rvSet" class="field"><option value="all">모든 시험</option><option value="concept" ${RV.set === 'concept' ? 'selected' : ''}>📘 기본 개념 전체</option>${sets.map((c) => `<option value="${c.id}" ${String(RV.set) === String(c.id) ? 'selected' : ''}>${esc(setTitle(c))}</option>`).join('')}</select>
-      <div class="tabs seg">${[['wait', '⏳ 채점 대기'], ['unpub', '💬 확정·피드백 미공개'], ['all', '전체']].map(([k, t]) => `<button class="tab ${RV.state === k ? 'on' : ''}" data-rst="${k}">${t}</button>`).join('')}</div>
+      <label class="sr-only" for="rvSet">시험</label><select id="rvSet" class="field"><option value="all">모든 시험</option><option value="concept" ${RV.set === 'concept' ? 'selected' : ''}>기본 개념 전체</option>${sets.map((c) => `<option value="${c.id}" ${String(RV.set) === String(c.id) ? 'selected' : ''}>${esc(setTitle(c))}</option>`).join('')}</select>
+      <div class="tabs seg">${[['wait', `${ico('clock', 14)} 채점 대기`], ['unpub', `${ico('chat', 14)} 확정·피드백 미공개`], ['all', '전체']].map(([k, t]) => `<button class="tab ${RV.state === k ? 'on' : ''}" data-rst="${k}">${t}</button>`).join('')}</div>
       <span style="flex:1"></span>
-      <div class="tabs seg">${[['group', '🧩 문항별 묶음'], ['card', '🧑‍🎓 학생별 카드']].map(([k, t]) => `<button class="tab ${RV.mode === k ? 'on' : ''}" data-rmode="${k}">${t}</button>`).join('')}</div>
+      <div class="tabs seg">${[['group', `${ico('grid', 14)} 문항별 묶음`], ['card', `${ico('users', 14)} 학생별 카드`]].map(([k, t]) => `<button class="tab ${RV.mode === k ? 'on' : ''}" data-rmode="${k}">${t}</button>`).join('')}</div>
     </div>
     <div id="rvBody"><p class="muted">불러오는 중…</p></div>`;
   // 범위를 바꾸면 다시 불러오므로 저장 안 된 것부터 확인
@@ -308,10 +308,10 @@ function drawReview() {
   const el = $('#rvBody'); if (!el || !RV.data) return;
   const fk = el.contains(document.activeElement) ? focusKey(document.activeElement) : null;
   const items = RV.data, rev = items.filter((r) => r.reviewed_at).length;
-  const head = `<div class="rvhead"><b>${items.length}건</b> <span class="muted small">· 틀린 문항 ${items.reduce((a, r) => a + r.wrong.length, 0)}개 · 💬 초안 ${items.filter((r) => r.feedback_draft && !r.feedback).length}건 · 검토함 ${rev}/${items.length}</span> <span id="rvUnsaved" aria-live="polite"></span><div class="rvprog" role="progressbar" aria-label="검토 진행" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${rev}"><i style="width:${items.length ? Math.round(rev / items.length * 100) : 0}%"></i></div></div>`;
+  const head = `<div class="rvhead"><b>${items.length}건</b> <span class="muted small">· 틀린 문항 ${items.reduce((a, r) => a + r.wrong.length, 0)}개 · ${ico('chat', 13)} 초안 ${items.filter((r) => r.feedback_draft && !r.feedback).length}건 · 검토함 ${rev}/${items.length}</span> <span id="rvUnsaved" aria-live="polite"></span><div class="rvprog" role="progressbar" aria-label="검토 진행" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${rev}"><i style="width:${items.length ? Math.round(rev / items.length * 100) : 0}%"></i></div></div>`;
   const keys = RV.mode === 'group' ? 'J/K 묶음 이동 · O/X 이 묶음 전체 채점' : 'J/K 카드 이동 · ↑/↓ 문항 · O/X 채점 · Space 선택 · E 피드백 고치기 · R 검토함';
   let body;
-  if (!items.length) body = `<div class="notice">${RV.state === 'wait' ? '채점 대기 중인 답이 없어요. 👏' : RV.state === 'unpub' ? '공개를 기다리는 피드백 초안이 없어요.' : '제출한 답이 없어요.'}</div>`;
+  if (!items.length) body = `<div class="notice">${RV.state === 'wait' ? '채점 대기 중인 답이 없어요.' : RV.state === 'unpub' ? '공개를 기다리는 피드백 초안이 없어요.' : '제출한 답이 없어요.'}</div>`;
   else if (RV.mode === 'group') {
     const gs = rvGroups();
     body = gs.length ? gs.map((g, k) => {
@@ -322,8 +322,8 @@ function drawReview() {
         <div class="rvrow"><div><span class="muted small">학생 답</span><div class="stu big">${optLabel(g.ans)}</div></div><div><span class="muted small">정답</span><div>${optLabel(g.q.answerText)}</div></div>
           <div class="cnt"><b>${g.items.length}</b>명</div>
           <div class="ox" role="group" aria-label="${g.i + 1}번 묶음 채점"><button class="o ${allO ? 'on' : ''}" data-gv="1" aria-pressed="${allO}">O</button><button class="x ${allX ? 'on' : ''}" data-gv="0" aria-pressed="${allX}">X</button></div></div>
-        ${ai.length ? `<div class="small" style="color:${aiOk ? 'var(--ok)' : 'var(--muted)'}">🤖 AI 제안: O ${aiOk} · X ${ai.length - aiOk} — ${esc(ai[0].reason)}</div>` : ''}
-        <div class="names">${g.items.map((r) => `<button class="nm ${r.marks[g.i] ? 'o' : ''}" data-open="${r.id}" title="눌러서 답 전체 보기">${r.st.class_no}-${r.st.number} ${esc(r.st.name)}${r._sv && r._sv.state === 'error' ? ' ⚠️' : ''}</button>`).join('')}</div></div>`;
+        ${ai.length ? `<div class="small" style="color:${aiOk ? 'var(--ok)' : 'var(--muted)'}">${ico('sparkle', 14)} AI 제안: O ${aiOk} · X ${ai.length - aiOk} — ${esc(ai[0].reason)}</div>` : ''}
+        <div class="names">${g.items.map((r) => `<button class="nm ${r.marks[g.i] ? 'o' : ''}" data-open="${r.id}" title="눌러서 답 전체 보기">${r.st.class_no}-${r.st.number} ${esc(r.st.name)}${r._sv && r._sv.state === 'error' ? ` ${ico('warn', 12)}` : ''}</button>`).join('')}</div></div>`;
     }).join('') : '<div class="notice ok">틀린 문항이 없어요. 아래에서 바로 확정할 수 있어요.</div>';
   } else {
     body = items.map((r, k) => {
@@ -332,15 +332,15 @@ function drawReview() {
       if (!r.wrong.length && !(r.feedback_draft && !r.feedback)) return `<div class="rvc slim ${k === RV.focus ? 'focus' : ''} ${fail ? 'rvfail' : ''}" data-k="${k}" data-id="${r.id}">${top}<span class="muted small">만점 · 피드백 초안 없음</span> <span data-svbox="${r.id}">${rvSvHTML(r)}</span></div>`;
       return `<div class="rvc ${k === RV.focus ? 'focus' : ''} ${fail ? 'rvfail' : ''}" data-k="${k}" data-id="${r.id}">${top}
         ${r.wrong.map((i, j) => { const q = r.c.questions[i], src = r.overrides[i] != null ? '선생님' : r.ai && r.ai[i] && r.ai[i].ok && r.marks[i] ? 'AI' : '자동'; return `<div class="rvrow ${k === RV.focus && j === RV.row ? 'rowf' : ''}"><div class="n">${i + 1}</div><div class="small">${optLabel(q.q)}</div><div class="stu">${optLabel(answerToText(q, r.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
-          <div class="ox" role="group" aria-label="${i + 1}번 채점 (지금: ${src})"><button class="o ${r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="1" aria-pressed="${r.marks[i]}">O</button><button class="x ${!r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="0" aria-pressed="${!r.marks[i]}">X</button></div></div>${r.ai && r.ai[i] ? `<div class="small rvai" style="color:${r.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI 제안: ${r.ai[i].ok ? 'O' : 'X'} — ${esc(r.ai[i].reason)}</div>` : ''}`; }).join('')}
-        ${r.feedback ? `<div class="notice ok small" style="margin:8px 0 0">📣 공개됨: ${esc(r.feedback)}</div>` : `<label class="sr-only" for="fb${r.id}">${esc(r.st.name)} 피드백 초안</label><textarea class="rvfb" id="fb${r.id}" data-fb="${r.id}" placeholder="피드백 초안이 없어요. 직접 써도 돼요. (확정할 때 학생에게 공개)">${esc(r.feedback_draft || '')}</textarea>`}
+          <div class="ox" role="group" aria-label="${i + 1}번 채점 (지금: ${src})"><button class="o ${r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="1" aria-pressed="${r.marks[i]}">O</button><button class="x ${!r.marks[i] ? 'on' : ''}" data-i="${i}" data-v="0" aria-pressed="${!r.marks[i]}">X</button></div></div>${r.ai && r.ai[i] ? `<div class="small rvai" style="color:${r.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">${ico('sparkle', 14)} AI 제안: ${r.ai[i].ok ? 'O' : 'X'} — ${esc(r.ai[i].reason)}</div>` : ''}`; }).join('')}
+        ${r.feedback ? `<div class="notice ok small" style="margin:8px 0 0">${ico('megaphone', 14)} 공개됨: ${esc(r.feedback)}</div>` : `<label class="sr-only" for="fb${r.id}">${esc(r.st.name)} 피드백 초안</label><textarea class="rvfb" id="fb${r.id}" data-fb="${r.id}" placeholder="피드백 초안이 없어요. 직접 써도 돼요. (확정할 때 학생에게 공개)">${esc(r.feedback_draft || '')}</textarea>`}
         <div class="bar" style="margin:6px 0 0"><span class="small" data-svbox="${r.id}" aria-live="polite">${rvSvHTML(r)}</span><span style="flex:1"></span><button class="btn sm" data-rev="${r.id}">${r.reviewed_at ? '↺ 검토 취소' : '✓ 검토함'}</button><button class="btn sm ghost" data-open="${r.id}">자세히</button></div></div>`;
     }).join('');
   }
   const selN = RV.sel.size, selItems = items.filter((r) => RV.sel.has(r.id)), canPub = selItems.some((r) => r.feedback_draft && !r.feedback);
   el.innerHTML = `${head}<p class="small muted">⌨ ${keys}</p>${body}
     <div class="rvbar"><b>선택 ${selN}건</b><button class="btn sm" id="rvPerfect">만점 선택</button><button class="btn sm" id="rvAll">전체 선택</button><button class="btn sm ghost" id="rvNone">해제</button><span style="flex:1"></span>
-      <button class="btn sm" id="rvPub" data-off="${canPub ? 0 : 1}" ${canPub ? '' : 'disabled'}>💬 피드백만 공개</button>
+      <button class="btn sm" id="rvPub" data-off="${canPub ? 0 : 1}" ${canPub ? '' : 'disabled'}>${ico('chat', 14)} 피드백만 공개</button>
       <button class="btn pri" id="rvGo" data-off="${selN ? 0 : 1}" ${selN ? '' : 'disabled'}>✔ 선택 ${selN}건 확정 + 피드백 공개</button></div>`;
   bindReview();
   rvHead();
@@ -402,7 +402,7 @@ function bindReview() {
       if (un.length) { rvHead(); return alert(`저장되지 않은 카드 ${un.length}건이 있어요 (저장 실패).\n'다시 저장' 또는 '되돌리기'를 한 뒤 확정하세요.`); }
       const toGrade = grade ? sel.filter((r) => r.status !== 'graded').length : 0, toPub = sel.filter((r) => r.feedback_draft && !r.feedback).length, warn = sel.filter(rvWarn).length;
       const names = new Set(sel.map((r) => r.student_id)).size;
-      if (!confirm(`${names}명 · ${sel.length}건\n- 확정: ${toGrade}건\n- 피드백 공개: ${toPub}건${warn ? `\n\n⚠️ 피드백 확인이 필요한 카드가 ${warn}건 있어요. 그래도 진행할까요?` : ''}\n\n학생이 바로 결과와 피드백을 볼 수 있어요.`)) { rvHead(); drawReview(); return; }
+      if (!confirm(`${names}명 · ${sel.length}건\n- 확정: ${toGrade}건\n- 피드백 공개: ${toPub}건${warn ? `\n\n피드백 확인이 필요한 카드가 ${warn}건 있어요. 그래도 진행할까요?` : ''}\n\n학생이 바로 결과와 피드백을 볼 수 있어요.`)) { rvHead(); drawReview(); return; }
       // 화면의 최신 초안을 함께 보내서 서버가 한 행 UPDATE로 확정+공개 (옛 초안이 공개되지 않게)
       // 서버는 한 번에 30건까지 → 나눠서 차례로
       const all = sel.map((x) => ({ id: x.id, rev: x.rev, ...(x.feedback ? {} : { feedback_draft: x.feedback_draft || '' }) })), r = { graded: 0, published: 0, conflicts: [] };
@@ -439,9 +439,9 @@ const AN = { cls: 0, kind: 'concept' };
 async function reportsView() {
   const hasC = KG().some((c) => c.kind === 'concept'); if (!hasC && AN.kind === 'concept') AN.kind = 'unit';
   app.innerHTML = `<div class="ctx">${gradeTabs()}<span class="sep"></span><div class="tabs"><button class="tab ${AN.cls === 0 ? 'on' : ''}" data-acls="0">전체 반</button>${Array.from({ length: CLASS_COUNT[GRADE] || 6 }, (_, i) => i + 1).map((n) => `<button class="tab ${n === AN.cls ? 'on' : ''}" data-acls="${n}">${n}반</button>`).join('')}</div></div>
-    <div class="bar view">${hasC ? `<div class="tabs seg"><button class="tab ${AN.kind === 'concept' ? 'on' : ''}" data-akind="concept">📘 기본 개념</button><button class="tab ${AN.kind === 'unit' ? 'on' : ''}" data-akind="unit">📝 단원 평가</button></div>` : ''}<span class="small muted">학생 답으로 바로 계산해요 (확정 전 답 포함)</span></div>
+    <div class="bar view">${hasC ? `<div class="tabs seg"><button class="tab ${AN.kind === 'concept' ? 'on' : ''}" data-akind="concept">${ico('book', 15)} 기본 개념</button><button class="tab ${AN.kind === 'unit' ? 'on' : ''}" data-akind="unit">${ico('note', 15)} 단원 평가</button></div>` : ''}<span class="small muted">학생 답으로 바로 계산해요 (확정 전 답 포함)</span></div>
     <div id="an"><p class="muted">계산하는 중…</p></div>
-    <h2 style="margin-top:28px">🤖 AI 분석 보고서</h2><p class="small muted">Claude 예약 작업이 평일 오후에 남긴 글이에요.</p><div id="rp"><p class="muted">불러오는 중…</p></div>`;
+    <h2 style="margin-top:28px">${ico('sparkle', 20)} AI 분석 보고서</h2><p class="small muted">Claude 예약 작업이 평일 오후에 남긴 글이에요.</p><div id="rp"><p class="muted">불러오는 중…</p></div>`;
   app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); AN.cls = 0; reportsView(); }));
   app.querySelectorAll('[data-acls]').forEach((b) => (b.onclick = () => { AN.cls = +b.dataset.acls; reportsView(); }));
   app.querySelectorAll('[data-akind]').forEach((b) => (b.onclick = () => { AN.kind = b.dataset.akind; reportsView(); }));
@@ -538,23 +538,23 @@ function drawDash(d) {
     ${AN.cls === 0 ? `<section class="panel"><h3>반별 평균 정답률</h3>${byClass.map((x) => `<div class="hrow"><span class="hl">${x.cn}반</span>${barHTML(x.rate, x.n ? pct(x.rate) + '%' : '-', `${x.cn}반 · 제출 ${x.n}건 · 학생 ${x.students}명`)}<span class="hn">${x.n}건</span></div>`).join('')}</section>` : ''}
     <section class="panel" ${AN.cls === 0 ? '' : 'style="grid-column:1/-1"'}><h3>${AN.kind === 'concept' ? '개념별' : '시험별'} 평균 정답률</h3>${bySet.map((x) => `<div class="hrow"><span class="hl" title="${esc(setTitle(x.c))}">${esc(x.c.kind === 'concept' ? `개념 ${x.c.id}` : qLabel(x.c))}</span>${barHTML(x.rate, pct(x.rate) + '%', `${setTitle(x.c)} · 제출 ${x.n}건`)}<span class="hn">${x.n}건</span></div>`).join('')}</section>
   </div>
-  <section class="panel"><h3>😓 어려웠던 문항 Top ${hard.length}</h3>
+  <section class="panel"><h3>${ico('warn', 16)} 어려웠던 문항 Top ${hard.length}</h3>
     <table class="plain an-t"><tr><th>세트·번호</th><th>문제</th><th>정답</th><th style="width:22%">정답률</th><th>자주 나온 오답</th></tr>
     ${hard.map((h) => `<tr><td><b>${esc(h.c.kind === 'concept' ? `개념 ${h.c.id}` : qLabel(h.c))}</b> ${h.i + 1}번</td><td class="small">${optLabel(h.q.q)}</td><td>${optLabel(h.q.answerText)}</td><td>${barHTML(h.rate, pct(h.rate) + '%', `${h.n}명 중 ${Math.round(h.rate * h.n)}명 정답`)}</td>
       <td class="small">${h.wrongs.map(([t, n]) => `<span class="wa">${optLabel(t)} <b>${n}</b></span>`).join(' ') || '-'}</td></tr>`).join('')}</table>
     <p class="small muted">제출 3건 이상인 세트만 계산해요. 막대에 마우스를 올리면 인원이 보여요.</p></section>
   <div class="dash2">
-    <section class="panel"><h3>🙋 도움이 필요한 학생 <span class="muted small">(평균 60% 미만)</span></h3>
-      ${need.length ? `<table class="plain an-t"><tr><th>학생</th><th style="width:34%">평균</th><th>낮은 세트</th></tr>${need.slice(0, 15).map((x) => `<tr><td style="white-space:nowrap">${x.st.class_no}-${x.st.number} <b>${esc(x.st.name)}</b></td><td>${barHTML(x.rate, pct(x.rate) + '%', `${x.n}개 세트 평균`)}</td><td class="small">${x.low.map((c) => esc(c.kind === 'concept' ? `개념 ${c.id}` : qLabel(c))).join(', ')}</td></tr>`).join('')}</table>${need.length > 15 ? `<p class="small muted">외 ${need.length - 15}명</p>` : ''}` : '<div class="notice ok">모두 60% 이상이에요 👏</div>'}</section>
-    <section class="panel"><h3>📭 아직 하나도 안 낸 학생 <span class="muted small">(${notYet.length}명)</span></h3>
+    <section class="panel"><h3>${ico('users', 16)} 도움이 필요한 학생 <span class="muted small">(평균 60% 미만)</span></h3>
+      ${need.length ? `<table class="plain an-t"><tr><th>학생</th><th style="width:34%">평균</th><th>낮은 세트</th></tr>${need.slice(0, 15).map((x) => `<tr><td style="white-space:nowrap">${x.st.class_no}-${x.st.number} <b>${esc(x.st.name)}</b></td><td>${barHTML(x.rate, pct(x.rate) + '%', `${x.n}개 세트 평균`)}</td><td class="small">${x.low.map((c) => esc(c.kind === 'concept' ? `개념 ${c.id}` : qLabel(c))).join(', ')}</td></tr>`).join('')}</table>${need.length > 15 ? `<p class="small muted">외 ${need.length - 15}명</p>` : ''}` : '<div class="notice ok">모두 60% 이상이에요!</div>'}</section>
+    <section class="panel"><h3>${ico('inbox', 16)} 아직 하나도 안 낸 학생 <span class="muted small">(${notYet.length}명)</span></h3>
       ${notYet.length ? `<div class="names">${notYet.map((st) => `<span class="nm">${st.class_no}-${st.number} ${esc(st.name)}</span>`).join('')}</div>` : '<div class="notice ok">모두 한 번 이상 냈어요.</div>'}</section>
   </div>`;
 }
 const TABHELP = {
-  grades: '📋 조회·개별 수정: 반 성적표를 보고, 칸을 눌러 한 학생의 답을 자세히 고쳐요. 여러 건을 한꺼번에 검토·확정·공개하는 일은 ✅ 검토·공개(작업함)에서 해요.',
-  review: '✅ 작업함: 오늘 처리할 채점 대기 · AI 제안 · 피드백 공개를 여기서 끝내요. 고친 O/X·초안은 바로 저장되고, 저장이 끝나야 확정할 수 있어요.',
-  reports: '📊 반·시험별 정답률과 도움이 필요한 학생을 봐요 (보기만, 바뀌는 것 없음).',
-  links: '🔓 시험을 열고 닫거나, 링크·QR을 나눠 줘요.',
+  grades: '조회·개별 수정: 반 성적표를 보고, 칸을 눌러 한 학생의 답을 자세히 고쳐요. 여러 건을 한꺼번에 검토·확정·공개하는 일은 검토·공개(작업함)에서 해요.',
+  review: '작업함: 오늘 처리할 채점 대기 · AI 제안 · 피드백 공개를 여기서 끝내요. 고친 O/X·초안은 바로 저장되고, 저장이 끝나야 확정할 수 있어요.',
+  reports: '반·시험별 정답률과 도움이 필요한 학생을 봐요 (보기만, 바뀌는 것 없음).',
+  links: '시험을 열고 닫거나, 링크·QR을 나눠 줘요.',
   key: '세트별 문제와 정답을 확인해요.',
   roster: '학생 명단과 로그인 ID를 관리해요. 빠진 학생은 지우지 않고 보관해요 (기록 유지, 언제든 복원).',
 };
@@ -610,7 +610,7 @@ async function drawGrades(quiet) {
   const cnt = ids.map((cid) => d.students.filter((s) => by[s.id + ':' + cid]).length);
   const subsIn = d.submissions.filter((x) => ids.includes(x.concept));
   const rate = subsIn.length ? Math.round(subsIn.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / subsIn.length * 100) + '%' : '-';
-  const kindIcon = { word: '🔤', spelltest: '✍️', exam: '📝', concept: '' };
+  const kindIcon = { word: ico('word', 13), spelltest: ico('pen', 13), exam: ico('note', 13), concept: '' };
   gx.innerHTML = `
   <div class="stats">
     <div class="stat"><b>${d.students.length}</b><span>학생</span></div>
@@ -619,7 +619,7 @@ async function drawGrades(quiet) {
     <div class="stat"><b>${rate}</b><span>정답률</span></div>
   </div>
   <div class="bar view">
-    ${hasConcepts ? `<div class="tabs seg"><button class="tab ${grp !== 'unit' ? 'on' : ''}" data-grp="concept">📘 기본 개념</button><button class="tab ${grp === 'unit' ? 'on' : ''}" data-grp="unit">📝 단원 평가</button></div>` : ''}
+    ${hasConcepts ? `<div class="tabs seg"><button class="tab ${grp !== 'unit' ? 'on' : ''}" data-grp="concept">${ico('book', 15)} 기본 개념</button><button class="tab ${grp === 'unit' ? 'on' : ''}" data-grp="unit">${ico('note', 15)} 단원 평가</button></div>` : ''}
     ${grp === 'unit' ? `<div class="tabs ufc"><button class="tab ${uf === 'all' ? 'on' : ''}" data-uf="all">전체</button>${units.map(([k, u]) => `<button class="tab ${uf === k ? 'on' : ''}" data-uf="${k}">${esc(u)}</button>`).join('')}</div>` : ''}
   </div>
   <div class="bar actions">
@@ -632,25 +632,25 @@ async function drawGrades(quiet) {
     <button class="btn sm" id="bulkPrint">${ico('print', 14)} 결과 출력</button>
     <button class="btn sm ghost" id="csv">⬇ CSV</button><button class="btn sm ghost" id="rf">↻ 새로고침</button>
   </div>
-  <div class="mxwrap"><table class="mx"><thead><tr><th>번호</th><th>이름</th>${ids.map((i) => { const c = KEY.find((x) => x.id === i); return `<th title="${esc(c.title)} (${c.questions.length}문제)${CLOSED.has(i) ? ' · 닫힘' : ''}" class="${CLOSED.has(i) ? 'muted' : ''}">${CLOSED.has(i) ? '🔒' : kindIcon[c.kind]}${esc(c.short)}</th>`; }).join('')}<th>제출</th><th>정답률</th></tr></thead><tbody>
+  <div class="mxwrap"><table class="mx"><thead><tr><th>번호</th><th>이름</th>${ids.map((i) => { const c = KEY.find((x) => x.id === i); return `<th title="${esc(c.title)} (${c.questions.length}문제)${CLOSED.has(i) ? ' · 닫힘' : ''}" class="${CLOSED.has(i) ? 'muted' : ''}">${CLOSED.has(i) ? ico('lock', 12) : kindIcon[c.kind]}${esc(c.short)}</th>`; }).join('')}<th>제출</th><th>정답률</th></tr></thead><tbody>
   ${d.students.map((s) => {
     const mine = ids.map((cid) => by[s.id + ':' + cid]);
     const got = mine.filter(Boolean);
     return `<tr><td>${s.number}</td><td class="nm">${esc(s.name)}</td>${mine.map((x, k) => x
-      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup title="AI 제안">🤖</sup>' : ''}${x.draft ? '<sup title="피드백 초안 (미공개)">💬</sup>' : x.pub ? '<sup title="피드백 공개됨">📣</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
-      : hby[s.id + ':' + ids[k]] ? `<td class="muted" title="이전: ${histTip(s.id, ids[k])}">🔁</td>` : `<td class="muted">·</td>`).join('')}<td>${got.length}</td><td>${got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) + '%' : '-'}</td></tr>`;
+      ? `<td class="c ${x.status !== 'graded' ? 'wait' : x.score >= totalOf(x.concept) * 0.8 ? 'ok' : 'low'}" data-sub="${x.id}" title="${x.attempt > 1 ? `${x.attempt}차 · 이전: ${histTip(s.id, x.concept)}` : ''}">${x.score}${x.status !== 'graded' ? '?' : ''}${x.ai ? '<sup title="AI 제안">${ico('sparkle', 11)}</sup>' : ''}${x.draft ? '<sup title="피드백 초안 (미공개)">${ico('chat', 11)}</sup>' : x.pub ? '<sup title="피드백 공개됨">${ico('megaphone', 11)}</sup>' : ''}${x.attempt > 1 ? `<sub class="att">${x.attempt}차</sub>` : ''}</td>`
+      : hby[s.id + ':' + ids[k]] ? `<td class="muted" title="이전: ${histTip(s.id, ids[k])}">${ico('retry', 13)}</td>` : `<td class="muted">·</td>`).join('')}<td>${got.length}</td><td>${got.length ? Math.round(got.reduce((a, b) => a + b.score / totalOf(b.concept), 0) / got.length * 100) + '%' : '-'}</td></tr>`;
   }).join('')}
   <tr class="avg"><td></td><td class="nm">반 평균</td>${avg.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr>
   <tr class="avg"><td></td><td class="nm">제출 인원</td>${cnt.map((a) => `<td>${a}</td>`).join('')}<td></td><td></td></tr></tbody></table></div>
-  <details class="help"><summary>ⓘ 표 보는 법</summary><p class="small">칸을 누르면 학생 답을 보고 O/X를 고칠 수 있어요. <span class="badge wait">노랑</span> 채점 대기(숫자 뒤 ?) · <span class="badge ok">초록</span> 확정 80% 이상 · <span class="badge no">빨강</span> 확정 80% 미만 · 🤖 AI 제안 있음(확정 전) · 💬 피드백 초안(학생에게 안 보임) · 📣 피드백 공개됨 · <b>2차</b> 재출제 후 다시 푼 결과(칸에 마우스를 올리면 이전 점수) · 🔁 재출제되어 아직 다시 안 푼 학생. 학생은 선생님이 확정한 뒤에 결과를 볼 수 있어요. 🔤 단어 시험 · ✍️ 철자 시험 · 📝 단원평가</p></details>`;
+  <details class="help"><summary>ⓘ 표 보는 법</summary><p class="small">칸을 누르면 학생 답을 보고 O/X를 고칠 수 있어요. <span class="badge wait">노랑</span> 채점 대기(숫자 뒤 ?) · <span class="badge ok">초록</span> 확정 80% 이상 · <span class="badge no">빨강</span> 확정 80% 미만 · ${ico('sparkle', 13)} AI 제안 있음(확정 전) · ${ico('chat', 13)} 피드백 초안(학생에게 안 보임) · ${ico('megaphone', 13)} 피드백 공개됨 · <b>2차</b> 재출제 후 다시 푼 결과(칸에 마우스를 올리면 이전 점수) · ${ico('retry', 13)} 재출제되어 아직 다시 안 푼 학생. 학생은 선생님이 확정한 뒤에 결과를 볼 수 있어요. ${ico('word', 13)} 단어 시험 · ${ico('pen', 13)} 철자 시험 · ${ico('note', 13)} 단원평가</p></details>`;
   gx.querySelectorAll('[data-sub]').forEach((td) => (td.onclick = () => openSub(+td.dataset.sub)));
   if ($('#aiCheck')) $('#aiCheck').onclick = async () => {
-    $('#aiCheck').disabled = true; $('#aiCheck').textContent = '🔌 확인 중…';
+    $('#aiCheck').disabled = true; $('#aiCheck').textContent = '확인 중…';
     try {
       const r = await T('/api/t/ai-check', {});
-      alert(`✅ AI 연결 정상 (${(r.ms / 1000).toFixed(1)}초)\n\n` + r.items.map((x) => `예시 ${x.n}번 "${x.answer}" → ${x.ok ? 'O' : 'X'} (${x.why}) ${x.reason}`).join('\n'));
-    } catch (e) { alert('❌ AI 연결 실패\n' + e.message); }
-    $('#aiCheck').disabled = false; $('#aiCheck').textContent = '🔌 AI 연결 확인';
+      alert(`AI 연결 정상 (${(r.ms / 1000).toFixed(1)}초)\n\n` + r.items.map((x) => `예시 ${x.n}번 "${x.answer}" → ${x.ok ? 'O' : 'X'} (${x.why}) ${x.reason}`).join('\n'));
+    } catch (e) { alert('AI 연결 실패\n' + e.message); }
+    $('#aiCheck').disabled = false; $('#aiCheck').textContent = 'AI 연결 확인';
   };
   $('#regrade').onclick = async () => { $('#regrade').disabled = true; try { const r = await T('/api/t/regrade', { grade: GRADE }); toast(`${GRADE}학년 답 ${r.checked}건 확인, ${r.changed}건 다시 채점했어요`, 'ok'); drawGrades(); } catch (e) { toast(e.message, 'error'); $('#regrade').disabled = false; } };
   gx.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => { GROUP = b.dataset.grp; localStorage.setItem('eng4-grp', GROUP); drawGrades(); }));
@@ -706,27 +706,27 @@ async function openSub(id) {
   const dirty = () => touched.size > 0 || fbNow() !== (s.feedback || '');
   MODAL_DIRTY = dirty;
   const overridesNow = () => { const o = { ...(s.overrides || {}) }; for (const i of touched) o[i] = marks[i]; return o; };
-  const src = (i) => (touched.has(i) ? '👩‍🏫 선생님(저장 전)' : s.overrides && s.overrides[i] != null ? (s.ai && s.ai[i] && s.ai[i].ok && s.overrides[i] === true ? '🤖 AI 제안' : '👩‍🏫 선생님') : '자동');
+  const src = (i) => (touched.has(i) ? '선생님(저장 전)' : s.overrides && s.overrides[i] != null ? (s.ai && s.ai[i] && s.ai[i].ok && s.overrides[i] === true ? 'AI 제안' : '선생님') : '자동');
   const draw = (note) => {
     const fb = fbNow(), score = marks.filter(Boolean).length, graded = s.status === 'graded';
     m.innerHTML = `<div class="modal"><div class="box">
       <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1" id="subTitle">${d.student.grade}학년 ${d.student.class_no}반 ${d.student.number}번 ${esc(d.student.name)}${d.student.archived_at ? ' <span class="badge">보관됨</span>' : ''} · ${qLabel(c)} ${esc(c.title)}</b><button class="btn sm" id="x">닫기</button></div>
       <p class="small muted substate">제출: ${new Date(s.submitted_at).toLocaleString('ko-KR')} · 채점: ${graded ? '<b style="color:var(--ok)">확정됨 (학생에게 보임)</b>' : '<b style="color:var(--wait)">채점 대기 (학생에게 안 보임)</b>'}
-        · AI: ${s.ai ? '🤖 제안 있음' : '없음'} · 피드백: ${s.feedback ? (graded ? '📣 공개됨' : '저장됨 (확정하면 공개)') : s.feedback_draft ? '💬 초안만 (미공개)' : '없음'}
+        · AI: ${s.ai ? `${ico('sparkle', 13)} 제안 있음` : '없음'} · 피드백: ${s.feedback ? (graded ? `${ico('megaphone', 13)} 공개됨` : '저장됨 (확정하면 공개)') : s.feedback_draft ? `${ico('chat', 13)} 초안만 (미공개)` : '없음'}
         · <span id="subSave" class="st ${dirty() ? 'st-saving' : 'st-saved'}" role="status">${note || (dirty() ? '✎ 저장 안 한 변경 있음' : '✓ 저장된 상태')}</span></p>
       <div class="gr h"><div>#</div><div>문제</div><div>학생 답</div><div>정답</div><div>채점</div></div>
-      ${c.questions.map((q, i) => `<div class="gr"><div><b>${i + 1}</b></div><div class="small">${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(🔊 ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}</div>
+      ${c.questions.map((q, i) => `<div class="gr"><div><b>${i + 1}</b></div><div class="small">${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(${ico('sound', 13)} ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}</div>
         <div class="stu">${optLabel(answerToText(q, s.answers[i])) || '<span class="muted">(빈칸)</span>'}</div><div>${optLabel(q.answerText)}</div>
         <div><div class="ox" role="group" aria-label="${i + 1}번 채점"><button class="o ${marks[i] ? 'on' : ''}" data-i="${i}" data-v="1" aria-pressed="${marks[i]}">O</button><button class="x ${!marks[i] ? 'on' : ''}" data-i="${i}" data-v="0" aria-pressed="${!marks[i]}">X</button></div>
-        <div class="auto">자동 ${s.auto[i] ? 'O' : 'X'}${marks[i] !== !!s.auto[i] || touched.has(i) || (s.overrides && s.overrides[i] != null) ? ` · ${src(i)} ${marks[i] ? 'O' : 'X'}` : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">🤖 AI 제안: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}${s.ai[i].why ? ` <span class="muted">(${esc(s.ai[i].why)})</span>` : ''}</div>` : ''}`).join('')}
+        <div class="auto">자동 ${s.auto[i] ? 'O' : 'X'}${marks[i] !== !!s.auto[i] || touched.has(i) || (s.overrides && s.overrides[i] != null) ? ` · ${src(i)} ${marks[i] ? 'O' : 'X'}` : ''}</div></div></div>${s.ai && s.ai[i] ? `<div class="small" style="margin:-4px 0 6px 42px;color:${s.ai[i].ok ? 'var(--ok)' : 'var(--muted)'}">${ico('sparkle', 14)} AI 제안: ${s.ai[i].ok ? 'O' : 'X'} — ${esc(s.ai[i].reason)}${s.ai[i].why ? ` <span class="muted">(${esc(s.ai[i].why)})</span>` : ''}</div>` : ''}`).join('')}
       <h3>점수: ${score} / ${c.questions.length}${(s.attempt || 1) > 1 ? ` <span class="badge">${s.attempt}차</span>` : ''}</h3>
-      ${(d.history || []).length ? `<details class="help" open><summary>📚 이전 기록 ${d.history.length}개</summary><table class="plain small" style="margin-top:6px"><tr><th>차수</th><th>점수</th><th>문항별 (O/X)</th><th>채점일</th></tr>${d.history.map((h) => `<tr><td>${h.attempt}차</td><td><b>${h.score}</b> / ${c.questions.length}</td><td style="font-family:monospace">${h.marks.map((mk, i) => `<span style="color:${mk ? 'var(--ok)' : 'var(--no)'}" title="${i + 1}번">${mk ? 'O' : 'X'}</span>`).join('')}</td><td>${fmtDate(h.graded_at) || '채점 전'}</td></tr>`).join('')}</table></details>` : ''}
-      ${s.feedback_draft ? `<div class="notice small" style="margin:8px 0">💬 <b>AI 피드백 초안</b> (아직 학생에게 안 보여요): ${esc(s.feedback_draft)} <button class="btn sm" id="useDraft">↓ 아래 칸에 넣기</button></div>` : ''}
+      ${(d.history || []).length ? `<details class="help" open><summary>${ico('book', 14)} 이전 기록 ${d.history.length}개</summary><table class="plain small" style="margin-top:6px"><tr><th>차수</th><th>점수</th><th>문항별 (O/X)</th><th>채점일</th></tr>${d.history.map((h) => `<tr><td>${h.attempt}차</td><td><b>${h.score}</b> / ${c.questions.length}</td><td style="font-family:monospace">${h.marks.map((mk, i) => `<span style="color:${mk ? 'var(--ok)' : 'var(--no)'}" title="${i + 1}번">${mk ? 'O' : 'X'}</span>`).join('')}</td><td>${fmtDate(h.graded_at) || '채점 전'}</td></tr>`).join('')}</table></details>` : ''}
+      ${s.feedback_draft ? `<div class="notice small" style="margin:8px 0">${ico('chat', 14)} <b>AI 피드백 초안</b> (아직 학생에게 안 보여요): ${esc(s.feedback_draft)} <button class="btn sm" id="useDraft">↓ 아래 칸에 넣기</button></div>` : ''}
       <label class="small muted" for="fbk">학생에게 남길 말 (선택${graded ? ' · 저장하면 학생 화면에 바로 보여요' : ' · 확정하면 보여요'})</label><textarea id="fbk" placeholder="예: 요일 첫 글자는 대문자로 써요!">${esc(fb)}</textarea>
       <div class="bar">${graded
-        ? `<button class="btn pri" id="save">수정 저장 (확정 유지 · 학생에게 바로 반영)</button><button class="btn" id="undo" title="학생 화면에서 결과를 다시 숨겨요">↩ 확정 취소 (채점 대기로)</button><button class="btn" id="aiOne" disabled title="확정된 결과는 AI 제안을 받지 않아요. 확정 취소 후 사용하세요">🤖 AI 제안</button>`
-        : `<button class="btn pri" id="ok">✔ 채점 확정 (학생에게 결과 공개)</button><button class="btn" id="save">저장 (채점 대기 유지)</button><button class="btn" id="aiOne" ${AIJOB.running ? 'disabled title="AI 일괄 작업 중"' : ''}>🤖 AI 제안</button>`}
-        <span style="flex:1"></span><button class="btn" id="redo">🔁 다시 풀게 하기 (기록 남김)</button><button class="btn sm danger" id="reset" title="기록 없이 이 답을 완전히 지워요">완전 삭제</button></div>
+        ? `<button class="btn pri" id="save">수정 저장 (확정 유지 · 학생에게 바로 반영)</button><button class="btn" id="undo" title="학생 화면에서 결과를 다시 숨겨요">↩ 확정 취소 (채점 대기로)</button><button class="btn" id="aiOne" disabled title="확정된 결과는 AI 제안을 받지 않아요. 확정 취소 후 사용하세요">${ico('sparkle', 14)} AI 제안</button>`
+        : `<button class="btn pri" id="ok">✔ 채점 확정 (학생에게 결과 공개)</button><button class="btn" id="save">저장 (채점 대기 유지)</button><button class="btn" id="aiOne" ${AIJOB.running ? 'disabled title="AI 일괄 작업 중"' : ''}>${ico('sparkle', 14)} AI 제안</button>`}
+        <span style="flex:1"></span><button class="btn" id="redo">${ico('retry', 14)} 다시 풀게 하기 (기록 남김)</button><button class="btn sm danger" id="reset" title="기록 없이 이 답을 완전히 지워요">완전 삭제</button></div>
     </div></div>`;
     m.querySelectorAll('.ox button').forEach((b) => (b.onclick = () => { const i = +b.dataset.i; marks[i] = b.dataset.v === '1'; touched.add(i); draw(); }));
     $('#fbk').oninput = () => { const el = $('#subSave'); if (el) statusMsg(el, dirty() ? '✎ 저장 안 한 변경 있음' : '✓ 저장된 상태', dirty() ? 'saving' : 'saved'); };
@@ -755,7 +755,7 @@ async function openSub(id) {
       toast(status === 'graded' ? '확정했어요' : status === 'submitted' ? '확정을 취소했어요 (채점 대기)' : '저장했어요', 'ok'); sh.close(); return true;
     } catch (e) {
       busy = false;
-      draw(); const el2 = $('#subSave'); if (el2) statusMsg(el2, '⚠️ 저장 실패: ' + e.message + (e.status === 409 ? ' — 닫고 다시 열어 주세요' : ''), 'error');
+      draw(); const el2 = $('#subSave'); if (el2) statusMsg(el2, '저장 실패: ' + e.message + (e.status === 409 ? ' — 닫고 다시 열어 주세요' : ''), 'error');
       return false;
     }
   };
@@ -763,12 +763,12 @@ async function openSub(id) {
   const ai = async () => {
     if (dirty()) { if (!confirm('저장하지 않은 O/X·말이 있어요. 먼저 저장(채점 대기 유지)한 뒤 AI 제안을 받을까요?')) return; if (!(await save(undefined, true))) return; }
     if (busy) return; busy = true;
-    $('#aiOne').disabled = true; $('#aiOne').textContent = '🤖 확인 중…';
+    $('#aiOne').disabled = true; $('#aiOne').textContent = '확인 중…';
     try {
       const r = await T('/api/t/ai-grade', { id, rev: s.rev });
       Object.assign(s, { ai: r.ai, overrides: r.overrides, rev: r.rev }); marks = srvMarks(); changed = true; busy = false;
-      draw(r.asked ? `🤖 AI가 ${r.asked}문항을 봤어요 — 확인 후 확정하세요` : '🤖 AI에게 보낼 애매한 오답이 없어요');
-    } catch (e) { busy = false; draw(); statusMsg($('#subSave'), '⚠️ AI 실패: ' + e.message, 'error'); }
+      draw(r.asked ? `AI가 ${r.asked}문항을 봤어요 — 확인 후 확정하세요` : 'AI에게 보낼 애매한 오답이 없어요');
+    } catch (e) { busy = false; draw(); statusMsg($('#subSave'), 'AI 실패: ' + e.message, 'error'); }
   };
   draw();
 }
@@ -777,7 +777,7 @@ async function openSub(id) {
 function openConfirm(visibleIds) {
   const sh = shell('일괄 확정'), m = sh.m, sets = KG();
   const st = { scope: 'class', undo: false, filter: 'all', sel: new Set(visibleIds), counts: null, useDraft: true };
-  const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  const kindName = { concept: '', word: ico('word', 13) + ' 단어 시험', spelltest: ico('pen', 13) + ' 철자 시험', exam: ico('note', 13) + ' 단원평가' };
   const body = (extra) => ({ grade: GRADE, class: st.scope === 'class' ? CLS : null, concepts: [...st.sel], filter: st.filter, undo: st.undo, useDraft: st.useDraft, ...extra });
   // 시험별 대상 수(전체 시험 기준)를 먼저 세어 둠
   const loadCounts = async () => {
@@ -791,7 +791,7 @@ function openConfirm(visibleIds) {
   const draw = () => {
     const cnt = (id) => (st.counts ? st.counts[id] || 0 : 0);
     const total = [...st.sel].reduce((a, id) => a + cnt(id), 0);
-    const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+    const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? ico('book', 15) + ' 기본 개념' : `${ico('note', 15)} ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
     m.innerHTML = `<div class="modal"><div class="box">
       <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${st.undo ? '↩ 확정 취소' : '✔ 일괄 확정'}</b><button class="btn sm" id="x">닫기</button></div>
       <div class="tabs seg" style="margin-bottom:10px"><button class="tab ${!st.undo ? 'on' : ''}" data-undo="0">✔ 확정하기</button><button class="tab ${st.undo ? 'on' : ''}" data-undo="1">↩ 확정 취소</button></div>
@@ -801,10 +801,10 @@ function openConfirm(visibleIds) {
         ${st.undo ? '' : `<b style="margin-left:10px">조건</b><select id="cfFilter" class="field">
           <option value="all" ${st.filter === 'all' ? 'selected' : ''}>대기 중인 것 모두</option>
           <option value="perfect" ${st.filter === 'perfect' ? 'selected' : ''}>만점인 것만</option>
-          <option value="ai" ${st.filter === 'ai' ? 'selected' : ''}>🤖 AI 채점을 마친 것(+만점)만</option></select>`}</div>
+          <option value="ai" ${st.filter === 'ai' ? 'selected' : ''}>AI 채점을 마친 것(+만점)만</option></select>`}</div>
       <div class="bar" style="margin:4px 0 6px"><b style="flex:1">시험 (${st.sel.size})</b><button class="btn sm" id="cfAll">대상 있는 것 전체</button><button class="btn sm ghost" id="cfNone">선택 해제</button></div>
       <div class="pplist">${st.counts == null ? '<p class="muted">세는 중…</p>' : groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((c) => { const n = cnt(c.id); return `<label class="${n ? '' : 'muted'}"><input type="checkbox" data-cf="${c.id}" ${st.sel.has(c.id) ? 'checked' : ''} ${n ? '' : 'disabled'}> ${c.kind === 'concept' ? `${c.id}. ${esc(c.title)}` : kindName[c.kind]} <b>${n ? `${n}건` : ''}</b>${visibleIds.includes(c.id) ? ' <span class="small muted">· 지금 화면</span>' : ''}</label>`; }).join('')}`).join('')}</div>
-      ${st.undo ? '' : `<label class="small" style="display:block;margin:6px 0"><input type="checkbox" id="cfDraft" ${st.useDraft ? 'checked' : ''}> 💬 AI 피드백 초안도 함께 학생에게 공개 (선생님이 쓴 말이 없는 것만)</label>`}
+      ${st.undo ? '' : `<label class="small" style="display:block;margin:6px 0"><input type="checkbox" id="cfDraft" ${st.useDraft ? 'checked' : ''}> ${ico('chat', 14)} AI 피드백 초안도 함께 학생에게 공개 (선생님이 쓴 말이 없는 것만)</label>`}
       <div class="bar"><span class="small">${st.undo ? '확정 취소' : '확정'}할 결과 <b style="font-size:18px">${total}건</b></span><span style="flex:1"></span>
         <button class="btn ${st.undo ? 'danger' : 'pri'}" id="cfGo" ${total ? '' : 'disabled'}>${st.undo ? `↩ ${total}건 확정 취소` : `✔ ${total}건 확정`}</button></div>
     </div></div>`;
@@ -847,7 +847,7 @@ function openReissue(visibleIds, d, by) {
     const c = KEY.find((x) => x.id === cid), n = totalOf(cid);
     const subs = d.students.map((st) => ({ st, x: by[st.id + ':' + cid] })).filter((r) => r.x);
     m.innerHTML = `<div class="modal"><div class="box">
-      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🔁 ${GRADE}학년 ${CLS}반 재출제</b><button class="btn sm" id="x">닫기</button></div>
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${ico('retry', 18)} ${GRADE}학년 ${CLS}반 재출제</b><button class="btn sm" id="x">닫기</button></div>
       <p class="small muted">고른 학생의 지금 답과 점수는 <b>이전 기록(1차, 2차…)</b>으로 남기고, 같은 시험을 처음부터 다시 풀게 해요.</p>
       <label class="small muted">시험</label>
       <select id="rsSet" class="field" style="width:100%;margin:4px 0 12px">${sets.map((x) => `<option value="${x.id}" ${x.id === cid ? 'selected' : ''}>${esc(qLabel(x))} · ${esc(x.title)} (${d.students.filter((st) => by[st.id + ':' + x.id]).length}명 제출)</option>`).join('')}</select>
@@ -855,7 +855,7 @@ function openReissue(visibleIds, d, by) {
         <button class="btn sm" data-pick="all">제출한 학생 전체</button><button class="btn sm" data-pick="low">80% 미만만</button><button class="btn sm ghost" data-pick="none">선택 해제</button></div>
       <div class="pplist">${subs.map(({ st, x }) => `<label><input type="checkbox" data-rs="${st.id}" ${sel.has(st.id) ? 'checked' : ''}> ${st.number}. ${esc(st.name)} — <b>${x.score}</b>/${n}${x.status !== 'graded' ? ' <span class="small" style="color:var(--wait)">채점 대기</span>' : ''}${x.attempt > 1 ? ` <span class="small muted">(${x.attempt}차)</span>` : ''}</label>`).join('')}</div>
       <div class="bar"><label><input type="checkbox" id="rsOpen" checked> 시험이 닫혀 있으면 함께 열기</label></div>
-      <div class="bar"><span class="small muted">학생이 다시 풀면 성적표에 <b>2차</b>로 표시되고, 이전 점수도 함께 볼 수 있어요.</span><span style="flex:1"></span><button class="btn pri" id="rsGo" ${sel.size ? '' : 'disabled'}>🔁 ${sel.size}명 재출제</button></div>
+      <div class="bar"><span class="small muted">학생이 다시 풀면 성적표에 <b>2차</b>로 표시되고, 이전 점수도 함께 볼 수 있어요.</span><span style="flex:1"></span><button class="btn pri" id="rsGo" ${sel.size ? '' : 'disabled'}>${ico('retry', 14)} ${sel.size}명 재출제</button></div>
     </div></div>`;
     $('#rsSet').onchange = () => { cid = +$('#rsSet').value; sel.clear(); draw(); };
     m.querySelectorAll('[data-rs]').forEach((x) => (x.onchange = () => { x.checked ? sel.add(+x.dataset.rs) : sel.delete(+x.dataset.rs); draw(); }));
@@ -889,12 +889,12 @@ async function openPrintPanel(visibleIds) {
   const cntOf = (cid) => d.students.filter((st) => has[st.id + ':' + cid]).length;
   const selSt = new Set(d.students.map((st) => st.id));
   const selSet = new Set(visibleIds.filter((cid) => cntOf(cid)));
-  const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
-  const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? ico('book', 15) + ' 기본 개념' : `${ico('note', 15)} ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+  const kindName = { concept: '', word: ico('word', 13) + ' 단어 시험', spelltest: ico('pen', 13) + ' 철자 시험', exam: ico('note', 13) + ' 단원평가' };
   const draw = () => {
     const onlyGraded = $('#pgOnly') ? $('#pgOnly').checked : true, detail = $('#pgDetail') ? $('#pgDetail').checked : true;
     m.innerHTML = `<div class="modal"><div class="box">
-      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🖨 ${GRADE}학년 ${CLS}반 결과 출력</b><button class="btn sm" id="x">닫기</button></div>
+      <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${ico('print', 18)} ${GRADE}학년 ${CLS}반 결과 출력</b><button class="btn sm" id="x">닫기</button></div>
       <div class="pp">
         <div><div class="bar" style="margin:0 0 6px"><b style="flex:1">학생 (${selSt.size}/${d.students.length})</b><button class="btn sm" id="stAll">전체 선택</button><button class="btn sm ghost" id="stNone">선택 해제</button></div>
           <div class="pplist">${d.students.map((st) => { const n = sets.filter((c) => has[st.id + ':' + c.id]).length; return `<label><input type="checkbox" data-st="${st.id}" ${selSt.has(st.id) ? 'checked' : ''}> ${st.number}. ${esc(st.name)} <span class="muted small">(${n})</span></label>`; }).join('')}</div></div>
@@ -903,7 +903,7 @@ async function openPrintPanel(visibleIds) {
       </div>
       <div class="bar"><label><input type="checkbox" id="pgOnly" ${onlyGraded ? 'checked' : ''}> 채점 확정된 결과만</label>
         <label><input type="checkbox" id="pgDetail" ${detail ? 'checked' : ''}> 문제별 자세히 (끄면 점수표만)</label></div>
-      <div class="bar"><span id="pgInfo" class="small muted"></span><span style="flex:1"></span><button class="btn pri" id="pgGo">🖨 출력하기</button></div>
+      <div class="bar"><span id="pgInfo" class="small muted"></span><span style="flex:1"></span><button class="btn pri" id="pgGo">${ico('print', 14)} 출력하기</button></div>
     </div></div>`;
     const info = () => {
       const og = $('#pgOnly').checked;
@@ -939,7 +939,7 @@ async function openPrintPanel(visibleIds) {
 let PREVIEW = null;
 async function roster() {
   app.innerHTML = `${clsTabs(CLS)}
-  <div class="tabs seg" style="margin:4px 0 12px"><button class="tab ${RSUB === 'list' ? 'on' : ''}" data-rsub="list">👥 현재 명렬표</button><button class="tab ${RSUB === 'upload' ? 'on' : ''}" data-rsub="upload">📄 파일로 올리기</button></div>
+  <div class="tabs seg" style="margin:4px 0 12px"><button class="tab ${RSUB === 'list' ? 'on' : ''}" data-rsub="list">${ico('users', 15)} 현재 명렬표</button><button class="tab ${RSUB === 'upload' ? 'on' : ''}" data-rsub="upload">${ico('note', 15)} 파일로 올리기</button></div>
   ${RSUB === 'upload' ? `<div class="card"><div class="bar" style="margin-top:0"><input type="file" id="file" accept=".xlsx,.xls,.csv,.txt">
     <label>학년 <select id="defgrade" class="field">${[3, 4].map((g) => `<option value="${g}" ${g === GRADE ? 'selected' : ''}>${g}학년</option>`).join('')}</select></label>
     <label>반 정보가 없을 때 <select id="defcls" class="field">${Array.from({ length: 15 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${n === CLS ? 'selected' : ''}>${n}반</option>`).join('')}</select></label></div>
@@ -958,7 +958,7 @@ async function drawCur() {
   if (my !== DRAW_SEQ || !$('#cur')) return;
   const act = d.students.filter((s) => !s.archived_at), arch = d.students.filter((s) => s.archived_at);
   const shown = RSHOWARCH ? d.students : act;
-  $('#cur').innerHTML = `${d.upgraded ? '' : '<div class="notice" role="alert">⚠️ DB 업그레이드 전이라 보관·복원과 명렬표 저장을 쓸 수 없어요. (위 안내 참고)</div>'}
+  $('#cur').innerHTML = `${d.upgraded ? '' : '<div class="notice" role="alert">${ico('warn', 15)} DB 업그레이드 전이라 보관·복원과 명렬표 저장을 쓸 수 없어요. (위 안내 참고)</div>'}
   <div class="bar" style="margin-top:0"><label><input type="checkbox" id="showArch" ${RSHOWARCH ? 'checked' : ''}> 보관된 학생도 보기 (${arch.length}명)</label></div>
   <table class="plain"><tr><th>번호</th><th>이름</th><th>학생 계정 ID (로그인용)</th><th>답</th><th></th></tr>${shown.map((s) => `<tr class="${s.archived_at ? 'archived' : ''}"><td>${s.number}</td><td>${esc(s.name)}${s.archived_at ? ` <span class="badge" title="${esc(new Date(s.archived_at).toLocaleString('ko-KR'))}">보관됨</span>` : ''}</td>
     <td><label class="sr-only" for="ids${s.id}">${esc(s.name)} 학생 계정 ID</label><input class="field small" id="ids${s.id}" data-ids="${s.id}" value="${esc((s.login_ids || []).join(', '))}" placeholder="ID 없음 — 로그인 불가" style="width:230px"> <button class="btn sm" data-saveid="${s.id}">ID 저장</button></td>
@@ -966,7 +966,7 @@ async function drawCur() {
     <td>${s.archived_at ? `<button class="btn sm" data-restore="${s.id}" data-n="${esc(s.name)}">↩ 복원</button>` : `<button class="btn sm ghost" data-arch="${s.id}" data-n="${esc(s.name)}" data-a="${s.answers}">보관</button>`}${!s.answers ? ` <button class="btn sm danger" data-del="${s.id}" data-n="${esc(s.name)}" title="답 기록이 없는 학생만 지울 수 있어요">삭제</button>` : ''}</td></tr>`).join('')}
   <tr><td><label class="sr-only" for="nno">번호</label><input id="nno" class="field" type="number" min="1" style="width:70px" placeholder="번호"></td><td><label class="sr-only" for="nnm">이름</label><input id="nnm" class="field" placeholder="이름"></td><td><label class="sr-only" for="nid">학생 계정 ID</label><input id="nid" class="field small" placeholder="학생 계정 ID (여러 개는 쉼표로)" style="width:230px"></td><td></td><td><button class="btn sm" id="add">추가</button></td></tr></table>
   <p class="small muted">${GRADE}학년 ${CLS}반 ${act.length}명${arch.length ? ` (보관 ${arch.length}명)` : ''} · ID가 두 개인 학생은 쉼표로 둘 다 넣으면 둘 다 로그인돼요. · <b>보관</b>: 목록·로그인에서 빠지지만 답 기록은 그대로 남고 언제든 복원할 수 있어요. 삭제는 답이 하나도 없는 학생만 돼요.</p>
-  ${(() => { const n = act.filter((s) => !s.login_ids || !s.login_ids.length).length; return n ? `<div class="notice">⚠️ ${CLS}반에 학생 계정 ID가 없는 학생이 ${n}명 있어요. 이 학생들은 로그인할 수 없어요. 엑셀을 다시 올리거나 위 표에 ID를 넣어 주세요.</div>` : (act.length ? '<div class="notice ok">✅ 모든 학생에게 학생 계정 ID가 있어요.</div>' : ''); })()}`;
+  ${(() => { const n = act.filter((s) => !s.login_ids || !s.login_ids.length).length; return n ? `<div class="notice">${ico('warn', 15)} ${CLS}반에 학생 계정 ID가 없는 학생이 ${n}명 있어요. 이 학생들은 로그인할 수 없어요. 엑셀을 다시 올리거나 위 표에 ID를 넣어 주세요.</div>` : (act.length ? `<div class="notice ok">${ico('check', 15)} 모든 학생에게 학생 계정 ID가 있어요.</div>` : ''); })()}`;
   const cur = $('#cur');
   $('#showArch').onchange = () => { RSHOWARCH = $('#showArch').checked; drawCur(); };
   const run = async (b, fn) => { b.disabled = true; try { await fn(); } catch (e) { toast(e.message, 'error'); b.disabled = false; } };
@@ -1034,7 +1034,7 @@ async function readFile() {
   if (!classes.length) { $('#pv').innerHTML = '<div class="notice">학생을 찾지 못했어요. 첫 줄에 ‘반, 번호, 이름’ 머리글이 있는지 확인해 주세요.</div>'; return; }
   $('#pv').innerHTML = `<div class="notice ok">${classes.map((c) => `<b>${c.grade}학년 ${c.class_no}반 ${c.students.length}명</b>`).join(' · ')} 을(를) 찾았어요. 아래 변경 내용을 확인하고 저장하세요.</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">${classes.map((c) => `<table class="plain"><tr><th colspan="3">${c.grade}학년 ${c.class_no}반</th></tr>${c.students.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td><td class="small">${s.login_ids ? s.login_ids.map(esc).join('<br>') : '<span class="muted">ID 없음</span>'}</td></tr>`).join('')}</table>`).join('')}</div>
-    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? '<div class="notice">⚠️ 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요. (이미 ID가 있는 학생은 그대로 둬요)</div>' : ''}
+    ${classes.some((c) => c.students.some((s) => !s.login_ids || !s.login_ids.length)) ? '<div class="notice">${ico('warn', 15)} 학생 계정 ID가 없는 학생은 로그인할 수 없어요. 파일에 ‘학생 계정 ID’ 열을 넣거나, 저장한 뒤 아래 표에서 ID를 넣어 주세요. (이미 ID가 있는 학생은 그대로 둬요)</div>' : ''}
     <label class="bar" style="cursor:pointer"><input type="checkbox" id="replaceR"> <span><b>반 전체 바꾸기</b> — 이 파일에 있는 반에서 파일에 없는 번호의 학생을 <b>보관</b>해요 (지우지 않음, 답 기록은 남고 나중에 복원 가능). 학생이 전학 가거나 번호가 바뀐 새 명렬표를 올릴 때만 켜세요.</span></label>
     <div id="diff" aria-live="polite"><p class="muted small">변경 내용을 계산하는 중…</p></div>
     <div class="bar"><button class="btn pri" id="saveR" disabled>명렬표 저장</button></div>`;
@@ -1045,11 +1045,11 @@ async function readFile() {
     let r; try { r = await T('/api/t/roster-preview', { classes: PREVIEW, archive }); } catch (e) { $('#diff').innerHTML = `<div class="notice" role="alert">${esc(e.message)}</div>`; return; }
     if (my !== seq || !$('#diff')) return;
     PV = r;
-    $('#diff').innerHTML = `${r.upgraded ? '' : '<div class="notice" role="alert">⚠️ DB 업그레이드 전이라 저장할 수 없어요. 위 안내대로 업그레이드 SQL을 먼저 실행해 주세요.</div>'}
+    $('#diff').innerHTML = `${r.upgraded ? '' : '<div class="notice" role="alert">${ico('warn', 15)} DB 업그레이드 전이라 저장할 수 없어요. 위 안내대로 업그레이드 SQL을 먼저 실행해 주세요.</div>'}
       ${r.classes.map((c) => `<div class="card" style="margin:8px 0"><b>${c.grade}학년 ${c.class_no}반</b> <span class="small muted">파일 ${c.total}명 · 그대로 ${c.same}명</span>
-        <div class="small"><span class="diff-add">➕ 추가 ${c.add.length}명</span> · <span class="diff-upd">✏️ 이름·ID 바뀜 ${c.update.length}명</span>${c.restore.length ? ` · <span class="diff-add">↩ 보관 해제 ${c.restore.length}명</span>` : ''} · <span class="diff-arch">📦 보관 ${c.archive.length}명</span></div>
+        <div class="small"><span class="diff-add">${ico('plus', 13)} 추가 ${c.add.length}명</span> · <span class="diff-upd">${ico('pen', 13)} 이름·ID 바뀜 ${c.update.length}명</span>${c.restore.length ? ` · <span class="diff-add">↩ 보관 해제 ${c.restore.length}명</span>` : ''} · <span class="diff-arch">${ico('box', 13)} 보관 ${c.archive.length}명</span></div>
         ${list(c.add, (s) => `<li class="diff-add">${s.number}번 ${esc(s.name)}</li>`)}
-        ${list(c.update, (s) => `<li class="diff-upd">${s.number}번 ${s.nameChanged ? `${esc(s.from)} → <b>${esc(s.name)}</b>` : esc(s.name)}${s.idsChanged ? ' (ID 바뀜)' : ''}${s.answers ? ` — <b>답 ${s.answers}건을 이어받음</b>${s.nameChanged ? ' ⚠️ 다른 학생이면 확인' : ''}` : ''}</li>`)}
+        ${list(c.update, (s) => `<li class="diff-upd">${s.number}번 ${s.nameChanged ? `${esc(s.from)} → <b>${esc(s.name)}</b>` : esc(s.name)}${s.idsChanged ? ' (ID 바뀜)' : ''}${s.answers ? ` — <b>답 ${s.answers}건을 이어받음</b>${s.nameChanged ? ` ${ico('warn', 13)} 다른 학생이면 확인` : ''}` : ''}</li>`)}
         ${list(c.restore, (s) => `<li class="diff-add">${s.number}번 ${s.nameChanged ? `${esc(s.from)} → <b>${esc(s.name)}</b>` : esc(s.name)} (보관 → 다시 사용${s.answers ? `, 답 ${s.answers}건` : ''})</li>`)}
         ${list(c.archive, (s) => `<li class="diff-arch">${s.number}번 ${esc(s.name)} — 보관 (답 ${s.answers}건은 그대로 남음)</li>`)}</div>`).join('')}`;
     $('#saveR').disabled = !r.upgraded;
@@ -1059,7 +1059,7 @@ async function readFile() {
   $('#saveR').onclick = async () => {
     if (!PV) return;
     const archive = $('#replaceR').checked, t = (k) => PV.classes.reduce((a, c) => a + c[k].length, 0), arch = t('archive'), upd = PV.classes.reduce((a, c) => a + c.update.filter((s) => s.nameChanged && s.answers).length, 0);
-    if (!confirm(`명렬표를 저장할까요?\n- 추가 ${t('add')}명 · 이름·ID 바뀜 ${t('update')}명 · 보관 해제 ${t('restore')}명 · 보관 ${arch}명${upd ? `\n\n⚠️ 이름이 바뀌면서 이전 답을 이어받는 학생이 ${upd}명 있어요.` : ''}${arch ? `\n\n보관된 학생은 목록·로그인에서 빠지지만 답 기록은 그대로 남아요.` : ''}`)) return;
+    if (!confirm(`명렬표를 저장할까요?\n- 추가 ${t('add')}명 · 이름·ID 바뀜 ${t('update')}명 · 보관 해제 ${t('restore')}명 · 보관 ${arch}명${upd ? `\n\n이름이 바뀌면서 이전 답을 이어받는 학생이 ${upd}명 있어요.` : ''}${arch ? `\n\n보관된 학생은 목록·로그인에서 빠지지만 답 기록은 그대로 남아요.` : ''}`)) return;
     $('#saveR').disabled = true;
     let r; try { r = await T('/api/t/roster', { classes: PREVIEW, archive }); } catch (e) { toast(e.message, 'error'); $('#saveR').disabled = false; return; }
     toast(`${r.count}명 저장했어요 (추가 ${r.added} · 바뀜 ${r.updated}${r.restored ? ` · 보관 해제 ${r.restored}` : ''}${r.archived ? ` · 보관 ${r.archived}` : ''})`, 'ok');
@@ -1085,8 +1085,8 @@ function bindCopy(root) {
     e.stopPropagation();
     const u = b.dataset.copyurl;
     if (await copyText(u)) {
-      toast('링크를 복사했어요 📋');
-      if (b.classList.contains('btn')) { const t = b.innerHTML; b.innerHTML = '✅ 복사됨'; b.classList.add('done'); setTimeout(() => { b.innerHTML = t; b.classList.remove('done'); }, 1500); }
+      toast('링크를 복사했어요');
+      if (b.classList.contains('btn')) { const t = b.innerHTML; b.innerHTML = ico('check', 14) + ' 복사됨'; b.classList.add('done'); setTimeout(() => { b.innerHTML = t; b.classList.remove('done'); }, 1500); }
     } else prompt('자동 복사가 안 돼요. 아래 링크를 길게 눌러(또는 Ctrl+C) 복사하세요', u);
   }));
 }
@@ -1094,12 +1094,12 @@ function bindCopy(root) {
 function zoomQR(c) {
   const u = testUrl(c.id), sh = shell('QR 크게 보기', null, () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }), m = sh.m;
   m.innerHTML = `<div class="modal qrzoom"><div class="box">
-    <div class="qz-top">${GRADE}학년 2학기 영어 ${CLOSED.has(c.id) ? '<span class="badge no">🔒 지금 닫혀 있어요</span>' : ''}</div>
+    <div class="qz-top">${GRADE}학년 2학기 영어 ${CLOSED.has(c.id) ? '<span class="badge no">${ico('lock', 13)} 지금 닫혀 있어요</span>' : ''}</div>
     <div class="qz-title">${esc(c.kind === 'concept' ? `개념 ${c.id} · ${c.title}` : c.title)}</div>
     <div class="qz-qr">${qrSVG(u, 10)}</div>
     <button class="qz-url linkbtn" data-copyurl="${u}" title="눌러서 복사">${u}</button>
-    <div class="qz-help">📱 QR을 찍거나 주소를 입력한 뒤, 이름과 학생 계정 ID로 들어가요</div>
-    <div class="bar" style="justify-content:center"><button class="btn pri" data-copyurl="${u}">📋 링크 복사</button><button class="btn" id="qzFull">⛶ 전체 화면</button><button class="btn" id="x">닫기 (Esc)</button></div>
+    <div class="qz-help">${ico('phone', 14)} QR을 찍거나 주소를 입력한 뒤, 이름과 학생 계정 ID로 들어가요</div>
+    <div class="bar" style="justify-content:center"><button class="btn pri" data-copyurl="${u}">${ico('copy', 14)} 링크 복사</button><button class="btn" id="qzFull">${ico('search', 14)} 전체 화면</button><button class="btn" id="x">닫기 (Esc)</button></div>
   </div></div>`;
   bindCopy(m);
   $('#x').onclick = () => sh.close();
@@ -1108,21 +1108,21 @@ function zoomQR(c) {
 function linksView() {
   const sets = KG();
   if (!LINKSEL || LINKSEL.grade !== GRADE) LINKSEL = { grade: GRADE, ids: new Set(sets.filter((c) => c.kind !== 'concept').map((c) => c.id)) };
-  const kindName = { concept: '📘 기본 개념', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
-  const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+  const kindName = { concept: ico('book', 13) + ' 기본 개념', word: ico('word', 13) + ' 단어 시험', spelltest: ico('pen', 13) + ' 철자 시험', exam: ico('note', 13) + ' 단원평가' };
+  const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? ico('book', 15) + ' 기본 개념' : `${ico('note', 15)} ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
   app.innerHTML = `<div class="ctx noprint">${gradeTabs()}<span style="flex:1"></span>
-      <button class="btn sm" id="lkAll">전체 선택</button><button class="btn sm ghost" id="lkNone">선택 해제</button><button class="btn sm pri" id="lkPrint">🖨 고른 QR 카드 출력 (${LINKSEL.ids.size})</button></div>
-    <div class="notice noprint small">🔓 <b>열린 시험만</b> 학생 화면에서 풀 수 있어요. 닫힌 시험은 학생 목록에 🔒로 보이고 제출할 수 없어요 (이미 본 결과는 볼 수 있어요).<br>학생이 링크나 QR로 들어와 로그인하면 그 시험이 바로 열려요. 학생 첫 화면 주소: <button class="linkbtn" data-copyurl="${location.origin}" title="눌러서 복사">${location.origin}</button> <button class="btn sm" data-copyurl="${location.origin}">📋 복사</button></div>
+      <button class="btn sm" id="lkAll">전체 선택</button><button class="btn sm ghost" id="lkNone">선택 해제</button><button class="btn sm pri" id="lkPrint">${ico('print', 14)} 고른 QR 카드 출력 (${LINKSEL.ids.size})</button></div>
+    <div class="notice noprint small">${ico('unlock', 14)} <b>열린 시험만</b> 학생 화면에서 풀 수 있어요. 닫힌 시험은 학생 목록에 ${ico('lock', 13)} 표시로 보이고 제출할 수 없어요 (이미 본 결과는 볼 수 있어요).<br>학생이 링크나 QR로 들어와 로그인하면 그 시험이 바로 열려요. 학생 첫 화면 주소: <button class="linkbtn" data-copyurl="${location.origin}" title="눌러서 복사">${location.origin}</button> <button class="btn sm" data-copyurl="${location.origin}">${ico('copy', 13)} 복사</button></div>
     <div class="bar noprint"><b>${GRADE}학년: 열림 ${sets.filter((c) => !CLOSED.has(c.id)).length} · 닫힘 ${sets.filter((c) => CLOSED.has(c.id)).length}</b></div>
     ${groups.map(([g, cs]) => `<div class="grphead noprint"><h3 class="grp">${g}</h3><button class="btn sm" data-open="${cs.map((c) => c.id).join(',')}">모두 열기</button><button class="btn sm ghost" data-close="${cs.map((c) => c.id).join(',')}">모두 닫기</button></div><div class="lkgrid noprint">${cs.map((c) => `
       <div class="lk ${LINKSEL.ids.has(c.id) ? 'on' : ''} ${CLOSED.has(c.id) ? 'off' : ''}">
         <label class="lkchk"><input type="checkbox" data-lk="${c.id}" ${LINKSEL.ids.has(c.id) ? 'checked' : ''}> 출력</label>
-        <button class="lkqr" data-zoom="${c.id}" title="눌러서 크게 보기">${qrSVG(testUrl(c.id), 3)}<span class="zoomhint">🔍 크게</span></button>
+        <button class="lkqr" data-zoom="${c.id}" title="눌러서 크게 보기">${qrSVG(testUrl(c.id), 3)}<span class="zoomhint">${ico('search', 11)} 크게</span></button>
         <div class="lkinfo"><div class="small muted">${c.kind === 'concept' ? `개념 ${c.id}` : `${esc(c.unit)} · ${kindName[c.kind]}`}</div>
           <b>${esc(c.title)}</b>
           <button class="lkurl linkbtn" data-copyurl="${testUrl(c.id)}" title="눌러서 복사">${testUrl(c.id)}</button>
-          <div class="bar" style="margin:6px 0 0"><label class="sw2"><input type="checkbox" data-tog="${c.id}" ${CLOSED.has(c.id) ? '' : 'checked'}><i></i>${CLOSED.has(c.id) ? '🔒 닫힘' : '🔓 열림'}</label></div>
-          <div class="bar" style="margin:6px 0 0"><button class="btn sm" data-copyurl="${testUrl(c.id)}">📋 링크 복사</button><a class="btn sm ghost" href="/?preview=${c.id}" target="_blank">👀 미리보기</a></div></div>
+          <div class="bar" style="margin:6px 0 0"><label class="sw2"><input type="checkbox" data-tog="${c.id}" ${CLOSED.has(c.id) ? '' : 'checked'}><i></i>${CLOSED.has(c.id) ? `${ico('lock', 13)} 닫힘` : `${ico('unlock', 13)} 열림`}</label></div>
+          <div class="bar" style="margin:6px 0 0"><button class="btn sm" data-copyurl="${testUrl(c.id)}">${ico('copy', 14)} 링크 복사</button><a class="btn sm ghost" href="/?preview=${c.id}" target="_blank">${ico('eye', 14)} 미리보기</a></div></div>
       </div>`).join('')}</div>`).join('')}
     <div id="qrPrint"></div>`;
   app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); linksView(); }));
@@ -1143,7 +1143,7 @@ function linksView() {
         <div class="qc-title">${esc(c.kind === 'concept' ? `개념 ${c.id} · ${c.title}` : c.title)}</div>
         <div class="qc-qr">${qrSVG(testUrl(c.id), 6)}</div>
         <div class="qc-url">${testUrl(c.id)}</div>
-        <div class="qc-help">📱 QR을 찍거나 주소를 입력한 뒤, 이름과 학생 계정 ID로 들어가요</div></div>`).join('')}</div>`;
+        <div class="qc-help">${ico('phone', 14)} QR을 찍거나 주소를 입력한 뒤, 이름과 학생 계정 ID로 들어가요</div></div>`).join('')}</div>`;
     printOnly($('#qrPrint'));
   };
 }
@@ -1153,14 +1153,14 @@ function keyView() {
   const sets = KG();
   if (!sets.some((c) => c.id === KEYSEL)) KEYSEL = sets[0] && sets[0].id;
   const groups = [];
-  for (const c of sets) { const g = c.kind === 'concept' ? '📘 기본 개념' : `📝 ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
-  const kindName = { concept: '', word: '🔤 단어 시험', spelltest: '✍️ 철자 시험', exam: '📝 단원평가' };
+  for (const c of sets) { const g = c.kind === 'concept' ? ico('book', 15) + ' 기본 개념' : `${ico('note', 15)} ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
+  const kindName = { concept: '', word: ico('word', 13) + ' 단어 시험', spelltest: ico('pen', 13) + ' 철자 시험', exam: ico('note', 13) + ' 단원평가' };
   const c = sets.find((x) => x.id === KEYSEL);
-  app.innerHTML = `<div class="ctx noprint">${gradeTabs()}<span style="flex:1"></span>${KEYSEL ? `<a class="btn sm" href="/?preview=${KEYSEL}" target="_blank">👀 학생 화면으로 미리보기</a>` : ''}<button class="btn sm" onclick="print()">🖨 이 세트 인쇄</button></div>
+  app.innerHTML = `<div class="ctx noprint">${gradeTabs()}<span style="flex:1"></span>${KEYSEL ? `<a class="btn sm" href="/?preview=${KEYSEL}" target="_blank">${ico('eye', 14)} 학생 화면으로 미리보기</a>` : ''}<button class="btn sm" onclick="print()">${ico('print', 14)} 이 세트 인쇄</button></div>
   <div class="layout2">
     <nav class="side noprint">${groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((x) => `<button class="si ${x.id === KEYSEL ? 'on' : ''}" data-key="${x.id}">${x.kind === 'concept' ? `${x.id}. ${esc(x.title)}` : kindName[x.kind]}<span class="muted"> ${x.questions.length}</span></button>`).join('')}`).join('')}</nav>
     <section>${c ? `<div class="card"><h3 style="margin-top:0">${c.kind === 'concept' ? qLabel(c) + ' · ' : ''}${esc(c.title)} <span class="muted small">(${esc(c.unit)}, ${c.questions.length}문제)</span></h3>
-      <ol class="keylist">${c.questions.map((q) => `<li>${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(🔊 ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}${q.money ? ` <span class="muted">(${q.money.c100 ? '100원×' + q.money.c100 : ''}${q.money.b1000 ? '1000원×' + q.money.b1000 : ''})</span>` : ''}${q.opts ? `<div class="muted small">[${q.opts.map(optLabel).join(' / ')}]</div>` : ''}<div>→ <b style="color:var(--ok)">${optLabel(q.answerText)}</b></div></li>`).join('')}</ol></div>` : '<p class="muted">문제가 없어요.</p>'}</section>
+      <ol class="keylist">${c.questions.map((q) => `<li>${optLabel(q.q)}${qExtra(q)}${q.say ? ` <span class="muted">(${ico('sound', 13)} ${esc(q.say)})</span>` : ''}${q.clock ? ` <span class="muted">(시계 ${q.clock[0]}:${String(q.clock[1]).padStart(2, '0')})</span>` : ''}${q.money ? ` <span class="muted">(${q.money.c100 ? '100원×' + q.money.c100 : ''}${q.money.b1000 ? '1000원×' + q.money.b1000 : ''})</span>` : ''}${q.opts ? `<div class="muted small">[${q.opts.map(optLabel).join(' / ')}]</div>` : ''}<div>→ <b style="color:var(--ok)">${optLabel(q.answerText)}</b></div></li>`).join('')}</ol></div>` : '<p class="muted">문제가 없어요.</p>'}</section>
   </div>`;
   app.querySelectorAll('[data-grade]').forEach((b) => (b.onclick = () => { GRADE = +b.dataset.grade; localStorage.setItem('eng4-grade', GRADE); KEYSEL = null; keyView(); }));
   app.querySelectorAll('[data-key]').forEach((b) => (b.onclick = () => { KEYSEL = +b.dataset.key; keyView(); scrollTo(0, 0); }));
