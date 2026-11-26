@@ -6,10 +6,11 @@
 <script src="/xlsx.js" defer></script>
 <script src="/qr.js"></script>
 </head>
-<body>
+<body class="role-teacher">
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
   <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades">📋 채점·성적</button><button class="tab" data-v="review">✅ 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports">📊 분석</button><button class="tab" data-v="links">🔓 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
   <span id="aijob" class="small" role="status" aria-live="polite"></span>
+  <button id="themeBtn" class="btn sm ghost" hidden title="교사·학생 화면 테마 설정">🎨 테마</button>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
 <div class="wrap tight"><div id="sysmsg"><div id="sysSchema"></div><div id="sysErr" aria-live="polite"></div></div><p class="tabhelp small muted" id="tabhelp"></p></div>
 <main class="wrap" id="app"></main>
@@ -24,9 +25,61 @@ let GRADE = +(localStorage.getItem('eng4-grade') || 4), CLASS_COUNT = { 3: 7, 4:
 let TOKEN = localStorage.getItem(LS), KEY = null, CLS = +(localStorage.getItem('eng4-cls') || 1), VIEW = 'grades', timer = null;
 const T = (path, body) => api(path, body, TOKEN).catch((e) => { if (e.status === 401) { logout(); } throw e; });
 
-function logout() { localStorage.removeItem(LS); TOKEN = null; RV.data = null; $('#nav').hidden = true; $('#out').hidden = true; $('#tabhelp').textContent = ''; login(); }
+function logout() { localStorage.removeItem(LS); TOKEN = null; RV.data = null; $('#nav').hidden = true; $('#out').hidden = true; $('#themeBtn').hidden = true; $('#tabhelp').textContent = ''; login(); }
 $('#out').onclick = async () => { if (await leaveOK()) logout(); };
 $('#nav').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) go(b.dataset.v); };
+
+// ---------- 화면 테마 설정 (교사 본인 즉시 전환 + 학생 전 학년 공통 지정) ----------
+const TEACHER_THEME_KEY = 'eng4-teacher-theme';
+const THEME_META = [
+  { id: 'default', name: '웜 페이퍼 (기본)', desc: '따뜻한 종이 톤', sw: ['#f4efe7', '#fbf8f3', '#e0522a'] },
+  { id: 'dual', name: '듀얼 톤', desc: '학생 학습지 · 교사 슬레이트', sw: ['#f4f7fb', '#ffffff', '#2563eb'] },
+  { id: 'playful', name: '초등 교실', desc: '코발트 · 3D 눌림 버튼', sw: ['#fffdf7', '#eff6ff', '#2563eb'] },
+  { id: 'crisp', name: '고대비 집중', desc: '교실 프로젝터 · 뚜렷한 테두리', sw: ['#f3f4f6', '#ffffff', '#ea580c'] },
+  { id: 'dark', name: '🌙 야간 다크', desc: '저녁 채점용 (교사 전용)', sw: ['#0f172a', '#1e293b', '#fb923c'], teacherOnly: true },
+];
+function applyTeacherTheme(id) {
+  const t = THEME_META.some((x) => x.id === id) ? id : 'default';
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem(TEACHER_THEME_KEY, t); } catch {}
+  return t;
+}
+applyTeacherTheme(localStorage.getItem(TEACHER_THEME_KEY) || 'default');
+async function openThemeModal() {
+  let stuTheme = 'default';
+  try { stuTheme = (await api('/api/theme')).studentTheme || 'default'; } catch {}
+  const curTeacher = document.documentElement.dataset.theme || 'default';
+  const cards = (list, active, attr) => `<div class="theme-grid">${list.map((t) => `<button type="button" class="theme-card ${active === t.id ? 'on' : ''}" data-${attr}="${t.id}" aria-pressed="${active === t.id}"><span class="theme-swatches">${t.sw.map((c) => `<i style="background:${c}"></i>`).join('')}</span><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join('')}</div>`;
+  const sh = openModal(`<div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">🎨 화면 테마 설정</b><button class="btn sm" id="thClose">닫기</button></div>
+    <h3 style="margin:8px 0 4px;font-size:16px">👩‍🏫 내 화면 (교사) — 이 기기에서만 즉시 바뀌어요</h3>
+    ${cards(THEME_META, curTeacher, 'ttheme')}
+    <h3 style="margin:12px 0 4px;font-size:16px">🧑‍🎓 학생 화면 — 모든 학생에게 공통 적용돼요</h3>
+    <p class="small muted" style="margin:0 0 6px">학생은 직접 테마를 바꿀 수 없고, 선생님이 고른 테마가 자동으로 적용됩니다.</p>
+    ${cards(THEME_META.filter((t) => !t.teacherOnly), stuTheme, 'stheme')}
+    <div id="thStatus" class="small" style="min-height:22px"></div>`, { label: '화면 테마 설정' });
+  const box = sh.box;
+  box.querySelector('#thClose').onclick = () => sh.close();
+  box.querySelectorAll('[data-ttheme]').forEach((b) => (b.onclick = () => {
+    const v = applyTeacherTheme(b.dataset.ttheme);
+    box.querySelectorAll('[data-ttheme]').forEach((x) => { const on = x.dataset.ttheme === v; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+    toast('교사 화면 테마를 바꿨어요', 'ok');
+  }));
+  box.querySelectorAll('[data-stheme]').forEach((b) => (b.onclick = async () => {
+    const v = b.dataset.stheme;
+    const stEl = box.querySelector('#thStatus');
+    statusMsg(stEl, '학생 화면 테마 저장 중…', 'saving');
+    try {
+      await T('/api/t/theme', { studentTheme: v });
+      box.querySelectorAll('[data-stheme]').forEach((x) => { const on = x.dataset.stheme === v; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+      statusMsg(stEl, '✓ 모든 학생 화면에 적용됐어요', 'saved');
+      toast('학생 화면 테마를 바꿨어요', 'ok');
+    } catch (e) {
+      statusMsg(stEl, '⚠️ ' + e.message, 'error');
+      toast(e.message, 'error');
+    }
+  }));
+}
+$('#themeBtn').onclick = openThemeModal;
 
 function login(msg) {
   app.innerHTML = `<div class="center-screen"><h2>교사 로그인</h2><p class="lead">3·4학년 2학기 영어 채점</p>
@@ -45,7 +98,7 @@ async function boot() {
   try { KEY = (await T('/api/t/key')).concepts;
     try { for (const v of Object.values((await T('/api/t/roster-check')).classes)) CLASS_COUNT[v.grade] = Math.max(CLASS_COUNT[v.grade] || 0, v.class_no); } catch {} } catch (e) { if (e.status !== 401) app.innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
   await loadClosed();
-  $('#nav').hidden = false; $('#out').hidden = false; go('grades');
+  $('#nav').hidden = false; $('#out').hidden = false; $('#themeBtn').hidden = false; go('grades');
   // DB 업그레이드 확인 (안 됐으면 저장 기능이 멈추므로 위에 계속 알림)
   T('/api/t/schema').then((r) => { $('#sysSchema').innerHTML = r.ok ? '' : `<div class="notice" role="alert">⚠️ ${esc(r.message)}</div>`; }).catch(() => {});
   checkErrors(); setInterval(() => { if (TOKEN && !document.hidden) checkErrors(); }, 5 * 60000);

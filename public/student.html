@@ -3,7 +3,7 @@
 <title>4학년 2학기 영어 · 기본 개념 정리와 확인 문제</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="/style.css"><base href="/"></head>
-<body>
+<body class="role-student">
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> <span id="ttl">2학기 영어</span></h1><span id="who" class="muted"></span><button id="out" class="btn sm ghost" hidden>나가기</button></div></header>
 <main class="wrap" id="app"><p class="muted">불러오는 중…</p></main>
 <script src="/common.js"></script>
@@ -36,6 +36,22 @@ function safeSetLS(k, v) {
 }
 function safeRemoveLS(k) {
   try { localStorage.removeItem(k); } catch {}
+}
+const STUDENT_THEME_KEY = 'eng4-student-theme';
+function applyStudentTheme(name) {
+  const t = ['default', 'dual', 'playful', 'crisp'].includes(name) ? name : 'default';
+  if (typeof document !== 'undefined' && document.documentElement) document.documentElement.dataset.theme = t;
+  return t;
+}
+applyStudentTheme(safeGetLS(STUDENT_THEME_KEY));
+async function syncStudentTheme() {
+  try {
+    const d = await api('/api/theme');
+    if (d && d.studentTheme) {
+      const t = applyStudentTheme(d.studentTheme);
+      safeSetLS(STUDENT_THEME_KEY, t);
+    }
+  } catch {}
 }
 
 // ---------- 임시저장 / 문항 fingerprint / 완성도 검사 (테스트 가능한 순수 로직 포함) ----------
@@ -276,12 +292,14 @@ async function previewMode(id) {
 }
 
 async function start() {
+  syncStudentTheme();
   if (PREVIEW_ID) return previewMode(PREVIEW_ID);
   TOKEN = safeGetLS(LS);
   if (TOKEN) { try { await loadMe(); return goTarget() || home(); } catch { safeRemoveLS(LS); TOKEN = null; } }
   login();
 }
 async function loadMe() {
+  syncStudentTheme();
   const d = await S('/api/me');
   MEDIA_TOKEN = TOKEN; ME = d.student; SUBS = {}; RETAKE = d.retake || {}; d.submissions.forEach((s) => (SUBS[s.concept] = s));
   const c = await S('/api/concepts?lite=1');
@@ -395,13 +413,17 @@ function tileState(s, c) {
   return { badge: '<span class="badge">지금 풀 시험</span>', cta: '문제 풀기 →' };
 }
 
+const unitColorIdx = (c) => {
+  const m = String(c.unit || '').match(/\d+/);
+  return m ? (Math.abs(parseInt(m[0], 10) - 7) % 5) : (c.id % 5);
+};
 const tileHTML = (c) => {
   const n = questionCountOf(c);
   const st = tileState(SUBS[c.id], c);
   const retakeBadge = !SUBS[c.id] && RETAKE[c.id] && c.open !== false
     ? `<span class="badge wait">🔁 ${RETAKE[c.id] + 1}차 다시 풀기</span>`
     : SUBS[c.id] && SUBS[c.id].attempt > 1 ? `<span class="badge">${SUBS[c.id].attempt}차</span>` : '';
-  return `<button type="button" class="tile${c.open === false && !SUBS[c.id] ? ' closed' : ''}" data-k="${c.id}">
+  return `<button type="button" class="tile${c.open === false && !SUBS[c.id] ? ' closed' : ''}" data-k="${c.id}" data-u="${unitColorIdx(c)}">
     <span class="num">${c.kind === 'concept' ? `개념 ${c.id} · ${esc(c.unit)}` : `${c.kind === 'word' ? '🔤 단어 시험' : c.kind === 'spelltest' ? '✍️ 철자 시험' : '📝 단원평가'} · ${n}문제`}</span>
     <div class="ttl">${esc(c.title)}</div>
     <div class="tile-foot"><span>${st.badge} ${retakeBadge}</span><span class="tile-cta">${st.cta}</span></div>

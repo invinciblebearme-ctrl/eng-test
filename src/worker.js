@@ -234,6 +234,15 @@ export default {
 
       const body = req.method === 'POST' && p !== '/api/t/media' ? await req.json().catch(() => ({})) : {};
       const q = url.searchParams;
+      const STUDENT_THEMES = ['default', 'dual', 'playful', 'crisp'];
+      if (p === '/api/theme' && req.method === 'GET') {
+        let studentTheme = 'default';
+        try {
+          const r = await sb(env, 'app_settings?select=value&key=eq.student_theme');
+          if (r && r[0] && STUDENT_THEMES.includes(r[0].value)) studentTheme = r[0].value;
+        } catch {}
+        return json({ studentTheme });
+      }
 
       // ----- 학생 -----
       if (p === '/api/login' && req.method === 'POST') {
@@ -672,6 +681,18 @@ export default {
             await sb(env, 'test_settings?on_conflict=concept', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: ids.map((concept) => ({ concept, enabled: !!body.enabled, updated_at: new Date().toISOString() })) });
           }
           return json({ closed: [...(await closedSet(env))] });
+        }
+        // 학생 화면 테마 지정 (교사만)
+        if (p === '/api/t/theme' && req.method === 'POST') {
+          const theme = String(body.studentTheme || '');
+          if (!STUDENT_THEMES.includes(theme)) return fail('지원하지 않는 테마예요');
+          try {
+            await sb(env, 'app_settings?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [{ key: 'student_theme', value: theme, updated_at: new Date().toISOString() }] });
+          } catch (e) {
+            if (e.status === 503) throw new HttpError('학생 테마 설정 표(app_settings)가 아직 없어요. Supabase SQL Editor에서 sql/upgrade-2026-11c-theme.sql을 실행해 주세요.', 503, { upgrade: true });
+            throw e;
+          }
+          return json({ ok: true, studentTheme: theme });
         }
         if (p === '/api/t/student-ids' && req.method === 'POST') {
           const ids = normIds(body.login_ids);

@@ -1,10 +1,12 @@
-:root{--bg:#f4efe7;--card:#fbf8f3;--ink:#2b2522;--muted:#665e58;--acc:#e0522a;--acc2:#fbe9e0;--dark:#4a4440;--ok:#177c43;--okbg:#e3f5ea;--no:#c5281e;--nobg:#fde7e5;--wait:#946200;--waitbg:#fff4d6;--line:#e4ddd3}
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&display=swap");
+:root{--bg:#f4efe7;--card:#fbf8f3;--ink:#2b2522;--muted:#665e58;--acc:#e0522a;--acc2:#fbe9e0;--dark:#4a4440;--ok:#177c43;--okbg:#e3f5ea;--no:#c5281e;--nobg:#fde7e5;--wait:#946200;--waitbg:#fff4d6;--info:#2554a8;--infobg:#eef3ff;--ai:#5b21b6;--aibg:#efe6ff;--line:#e4ddd3;--font-sans:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;--font-en:"Lexend","Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;--sh-sm:0 1px 3px rgba(43,37,34,.05),0 1px 2px rgba(43,37,34,.04);--sh-md:0 6px 16px rgba(43,37,34,.09),0 2px 4px rgba(43,37,34,.05)}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;font-size:17px;line-height:1.5}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);font-size:17px;line-height:1.5}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.en,.opt,.spell,.chip,.q input[type=text],.q input.blank,table.words td.w,.rvrow .stu{font-family:var(--font-en)}
 .wrap{max-width:980px;margin:0 auto;padding:16px 16px 80px}
 header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
 header.top .wrap{display:flex;align-items:center;gap:12px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
@@ -25,8 +27,9 @@ h2 .dag{color:var(--acc)}
 .g-cls{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
 .g-names{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .g-concepts{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:left}
-.tile:hover{border-color:var(--acc)}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:left;box-shadow:var(--sh-sm);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+.tile:hover,.tile:focus-visible{border-color:var(--acc);box-shadow:var(--sh-md);transform:translateY(-2px)}
+.tile.soon:hover,.tile.closed:hover{transform:none;box-shadow:var(--sh-sm);border-color:var(--line)}
 .tile.big{font-size:22px;font-weight:700;text-align:center;padding:26px 10px}
 .tile .num{color:var(--acc);font-weight:800;font-size:14px}
 .tile .ttl{font-weight:700;margin:2px 0 8px}
@@ -36,7 +39,7 @@ h2 .dag{color:var(--acc)}
 .badge.no{background:var(--nobg);color:var(--no)}
 .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
 @media(max-width:700px){.cards{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--sh-sm)}
 .card.dark{background:var(--dark);color:#fff;border-color:var(--dark)}
 .card.dark h4{color:#f4a988}
 .card.center{display:flex;gap:20px;justify-content:center;align-items:center;flex-wrap:wrap}
@@ -53,7 +56,7 @@ h2 .dag{color:var(--acc)}
 .tbl tr.ko td{background:var(--acc2)}
 .sw{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid #bbb;vertical-align:-2px;margin-right:4px}
 .clocks{text-align:center;font-weight:800;font-size:18px}
-.q{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:12px 0}
+.q{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:12px 0;box-shadow:var(--sh-sm)}
 .q.ok{border-color:var(--ok);background:#f6fcf8}.q.no{border-color:var(--no);background:#fff8f7}
 .q .qh{display:flex;gap:10px;align-items:flex-start}
 .q .qn{background:var(--acc);color:#fff;border-radius:10px;min-width:32px;height:32px;display:grid;place-items:center;font-weight:800}
@@ -67,12 +70,14 @@ h2 .dag{color:var(--acc)}
 .q input.blank{width:170px;display:inline-block;margin:4px}
 .q select{padding:10px;border:2px solid var(--line);border-radius:12px;font-size:17px;margin:4px;background:#fffdfa}
 .opts{display:flex;flex-wrap:wrap;gap:8px}
-.opt{border:2px solid var(--line);background:#fffdfa;border-radius:12px;padding:10px 18px;min-height:44px;font-size:18px;font-weight:600}
+.opt{border:2px solid var(--line);background:#fffdfa;border-radius:12px;padding:10px 18px;min-height:44px;font-size:18px;font-weight:600;box-shadow:var(--sh-sm);transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+.opt:hover{border-color:var(--acc);transform:translateY(-1px)}
 .opt.on{border-color:var(--acc);background:var(--acc2);color:#9f3014}
 .opt u{text-decoration-thickness:3px;text-decoration-color:var(--acc)}
 .say{border:none;background:var(--dark);color:#fff;border-radius:999px;padding:8px 16px;font-weight:700}
 .chips{display:flex;flex-wrap:wrap;gap:8px;min-height:50px;padding:8px;border:2px dashed var(--line);border-radius:12px;background:#fffdfa;margin-bottom:8px}
-.chip{border:2px solid var(--acc);background:#fff;border-radius:10px;padding:6px 14px;font-size:18px;font-weight:700}
+.chip{border:2px solid var(--acc);background:#fff;border-radius:10px;padding:6px 14px;font-size:18px;font-weight:700;box-shadow:var(--sh-sm);transition:transform .12s ease,box-shadow .12s ease}
+.chip:hover:not(:disabled){transform:translateY(-1px);box-shadow:var(--sh-md)}
 .chip.used{opacity:.25;pointer-events:none}
 .fb{margin:8px 0 0 42px;font-size:15px}
 .fb .right{color:var(--ok);font-weight:700}
@@ -309,11 +314,11 @@ button.lkqr:hover .zoomhint{opacity:1}
 .tnote.pop{animation:tnpop .6s cubic-bezier(.2,.75,.2,1) both}
 @keyframes tnpop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 .badge.note{background:#FFF4EC;color:var(--acc);border:1px solid #F2A47F}
-.badge.draft{background:#eef3ff;color:#2b54a8;border:1px solid #c9d8f8}
-@media print{.tnote{background:#fff;border:2px solid #999;border-left:8px solid #555}.tnote .tnh{color:#333}.tnote p{font-size:14px}}
+.badge.draft{background:var(--infobg);color:var(--info);border:1px solid #c9d8f8}
+@media print{.tnote{background:#fff;border:2px solid #999;border-left:8px solid #555}.tnote .tnh{color:#333}.tnote p{font-size:14px}.tile,.card,.q,.opt,.chip{box-shadow:none!important;transform:none!important}}
 
 /* 학생 임시저장 · 검토 모달 · 홈 CTA */
-.draft-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#eef3ff;border:1px solid #c9d8f8;border-radius:12px;padding:10px 14px;margin:12px 0;font-size:14px;color:#223a6d}
+.draft-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--infobg);border:1px solid #c9d8f8;border-radius:12px;padding:10px 14px;margin:12px 0;font-size:14px;color:var(--info)}
 .draft-bar.err{background:var(--nobg);border-color:#f1b8b3;color:var(--no)}
 .draft-bar .draft-actions{display:flex;gap:8px;align-items:center}
 .q.incomplete{border-color:#d97706;box-shadow:0 0 0 2px rgba(217,119,6,.14)}
@@ -332,7 +337,7 @@ button.lkqr:hover .zoomhint{opacity:1}
 
 /* common.js & teacher.html 지원 클래스 */
 .st{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;padding:4px 10px;border-radius:8px;background:#f3efe8;color:var(--ink)}
-.st-saving{background:#eef3ff;color:#2b54a8}
+.st-saving{background:var(--infobg);color:var(--info)}
 .st-saved{background:var(--okbg);color:var(--ok)}
 .st-error{background:var(--nobg);color:var(--no)}
 .st-info{background:var(--waitbg);color:var(--wait)}
@@ -343,12 +348,12 @@ button.lkqr:hover .zoomhint{opacity:1}
 #toasts .toast.info{background:var(--ink);color:#fff}
 .tile.today{border:2px solid var(--acc);background:#fff9f5}
 .wrap.tight,.wrap:has(> #sysmsg):has(> #tabhelp){padding-top:8px;padding-bottom:0}
-.today{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:10px 0 14px}
+.today{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:10px 0 14px;box-shadow:var(--sh-sm)}
 .today-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
 .today.compact{display:grid;grid-template-columns:auto repeat(4,1fr);gap:10px;align-items:stretch}
 .today.compact > b{align-self:center;font-size:15px;white-space:nowrap;padding-right:4px}
-.today .tile{display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:default}
-.today .tile:hover{border-color:var(--line)}
+.today .tile{display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:default;box-shadow:none}
+.today .tile:hover{border-color:var(--line);transform:none;box-shadow:none}
 .today .tile b{font-size:24px;line-height:1.1}
 .today .tile.warn{background:var(--waitbg);border-color:#f0d58a}
 .today .tile.warn b{color:var(--wait)}
@@ -356,13 +361,13 @@ button.lkqr:hover .zoomhint{opacity:1}
 .today .tile.done b{color:var(--ok)}
 .today .tile .btn{margin-top:auto;align-self:flex-start}
 @media(max-width:700px){.today-tiles,.today.compact{grid-template-columns:repeat(2,1fr)}.today.compact > b{grid-column:1/-1}.today table.plain{display:block;overflow-x:auto;max-width:100%}.tabs.seg{flex-wrap:wrap;border-radius:14px;max-width:100%}}
-#aijob{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;background:#efe6ff;color:#4c1d95;border:1px solid #d8c8f8;border-radius:999px;padding:3px 10px}
+#aijob{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;background:var(--aibg);color:var(--ai);border:1px solid #d8c8f8;border-radius:999px;padding:3px 10px}
 #aijob:empty{display:none}
 #navWait{margin-left:4px;background:var(--waitbg);color:var(--wait)}
 .substate{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#faf6f0;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:14px}
 #rvUnsaved{font-weight:700;color:var(--wait)}
 .tabhelp{font-size:14px;color:var(--muted);margin:6px 0 12px}
-.badge.ai{background:#efe6ff;color:#5b21b6}
+.badge.ai{background:var(--aibg);color:var(--ai)}
 .badge.pub{background:var(--okbg);color:var(--ok)}
 .badge.unsaved{background:var(--waitbg);color:var(--wait)}
 .rvfail{background:var(--nobg);border:1px solid #f1b8b3;color:var(--no);border-radius:10px;padding:8px 12px;margin:6px 0;font-size:14px}
@@ -388,4 +393,93 @@ tr.archived td{opacity:.55;text-decoration:line-through}
   .sm2 label{min-width:0;width:100%}
   .rhead{grid-template-columns:1fr;gap:6px}
   .rscore{grid-row:auto;grid-column:1;font-size:28px}
+}
+@media (prefers-reduced-motion: reduce){
+  .tile,.opt,.chip,.tnote.pop{transition:none!important;animation:none!important}
+  .tile:hover,.tile:focus-visible,.opt:hover,.chip:hover{transform:none!important}
+}
+
+/* ---------- 디자인 테마 4종 + 교사 야간 다크 모드 ---------- */
+/* 1. 듀얼 톤 (학생: 따뜻한 학습지 + 단원별 상단 바 / 교사: 쿨 슬레이트 화이트) */
+html[data-theme="dual"] body.role-student{--bg:#f7f4ee;--card:#ffffff;--ink:#2b2522;--muted:#665e58;--acc:#e0522a;--acc2:#fbe9e0;--line:#e4ddd3}
+html[data-theme="dual"] body.role-student .tile[data-u="0"]{border-top:4px solid #38bdf8}
+html[data-theme="dual"] body.role-student .tile[data-u="1"]{border-top:4px solid #34d399}
+html[data-theme="dual"] body.role-student .tile[data-u="2"]{border-top:4px solid #fb7185}
+html[data-theme="dual"] body.role-student .tile[data-u="3"]{border-top:4px solid #fbbf24}
+html[data-theme="dual"] body.role-student .tile[data-u="4"]{border-top:4px solid #a78bfa}
+html[data-theme="dual"] body.role-teacher{--bg:#f4f7fb;--card:#ffffff;--ink:#0f172a;--muted:#475569;--acc:#2563eb;--acc2:#dbeafe;--line:#dbe3ef;--ok:#15803d;--okbg:#dcfce7;--wait:#a16207;--waitbg:#fef9c3;--no:#b91c1c;--nobg:#fee2e2}
+
+/* 2. 친근한 초등 교실 (Soft Playful Classroom) */
+html[data-theme="playful"]{--bg:#fffdf7;--card:#ffffff;--ink:#1e293b;--muted:#64748b;--acc:#2563eb;--acc2:#eff6ff;--line:#dbeafe}
+html[data-theme="playful"] .opt,html[data-theme="playful"] .chip,html[data-theme="playful"] .btn.pri{border-bottom-width:4px}
+html[data-theme="playful"] .opt{border-color:#bfdbfe}
+html[data-theme="playful"] .opt.on{border-color:#2563eb;color:#1d4ed8}
+html[data-theme="playful"] .tile{border-width:2px;border-bottom-width:4px}
+html[data-theme="playful"] .btn.pri{border-bottom-color:#1d4ed8}
+html[data-theme="playful"] .today .tile{border-width:1px}
+
+/* 3. 고대비 집중 · 교실 프로젝터 (Crisp Paper) */
+html[data-theme="crisp"]{--bg:#f3f4f6;--card:#ffffff;--ink:#0f172a;--muted:#334155;--acc:#ea580c;--acc2:#ffedd5;--line:#cbd5e1}
+html[data-theme="crisp"] body.role-teacher{--acc:#0f172a;--acc2:#e2e8f0;--line:#94a3b8}
+html[data-theme="crisp"] .tile,html[data-theme="crisp"] .q,html[data-theme="crisp"] .today,html[data-theme="crisp"] .stat{border-width:2px}
+html[data-theme="crisp"] .opt{border-color:#94a3b8}
+html[data-theme="crisp"] .opt.on{border-color:#ea580c;background:#ffedd5;color:#9a3412}
+html[data-theme="crisp"] .spell input.sp{border-width:3px}
+
+/* 4. 교사용 야간 채점 다크 모드 */
+html[data-theme="dark"] body.role-teacher{--bg:#0f172a;--card:#1e293b;--ink:#f1f5f9;--muted:#94a3b8;--acc:#fb923c;--acc2:#431407;--line:#334155;--ok:#4ade80;--okbg:#052e16;--wait:#fbbf24;--waitbg:#422006;--no:#f87171;--nobg:#450a0a;--info:#93c5fd;--infobg:#172554;--ai:#c4b5fd;--aibg:#2e1065;--sh-sm:0 1px 3px rgba(0,0,0,.35);--sh-md:0 8px 20px rgba(0,0,0,.45)}
+html[data-theme="dark"] body.role-teacher .card,
+html[data-theme="dark"] body.role-teacher .today,
+html[data-theme="dark"] body.role-teacher .stat,
+html[data-theme="dark"] body.role-teacher .panel,
+html[data-theme="dark"] body.role-teacher .rvc,
+html[data-theme="dark"] body.role-teacher .rvg,
+html[data-theme="dark"] body.role-teacher .lk,
+html[data-theme="dark"] body.role-teacher .side,
+html[data-theme="dark"] body.role-teacher .pplist,
+html[data-theme="dark"] body.role-teacher .q,
+html[data-theme="dark"] body.role-teacher .rhead,
+html[data-theme="dark"] body.role-teacher .btn,
+html[data-theme="dark"] body.role-teacher .tab,
+html[data-theme="dark"] body.role-teacher .field,
+html[data-theme="dark"] body.role-teacher textarea,
+html[data-theme="dark"] body.role-teacher table.plain,
+html[data-theme="dark"] body.role-teacher .mx,
+html[data-theme="dark"] body.role-teacher .mx td.nm,
+html[data-theme="dark"] body.role-teacher .ox button{background:#1e293b;color:#f1f5f9;border-color:#334155}
+html[data-theme="dark"] body.role-teacher .tabs.seg{background:#0b1220}
+html[data-theme="dark"] body.role-teacher .tabs.seg .tab.on{background:#334155;color:#f8fafc}
+html[data-theme="dark"] body.role-teacher .tab.on,
+html[data-theme="dark"] body.role-teacher .btn.pri{background:#fb923c;color:#0f172a;border-color:#fb923c}
+html[data-theme="dark"] body.role-teacher .btn.ghost{background:transparent}
+html[data-theme="dark"] body.role-teacher .mx th,
+html[data-theme="dark"] body.role-teacher .mx tr.avg td,
+html[data-theme="dark"] body.role-teacher .substate{background:#0b1220;color:#cbd5e1}
+html[data-theme="dark"] body.role-teacher .today .tile.warn,
+html[data-theme="dark"] body.role-teacher .stat.warn,
+html[data-theme="dark"] body.role-teacher .notice{background:#422006;border-color:#854d0e;color:#fef3c7}
+html[data-theme="dark"] body.role-teacher .today .tile.done,
+html[data-theme="dark"] body.role-teacher .notice.ok{background:#052e16;border-color:#166534;color:#dcfce7}
+html[data-theme="dark"] body.role-teacher .rvbar{background:rgba(15,23,42,.95)}
+html[data-theme="dark"] body.role-teacher .badge{background:#334155;color:#e2e8f0}
+html[data-theme="dark"] body.role-teacher .badge.ok{background:#052e16;color:#4ade80}
+html[data-theme="dark"] body.role-teacher .badge.wait{background:#422006;color:#fbbf24}
+html[data-theme="dark"] body.role-teacher .badge.no{background:#450a0a;color:#f87171}
+html[data-theme="dark"] body.role-teacher .badge.ai{background:#2e1065;color:#c4b5fd}
+html[data-theme="dark"] body.role-teacher .names .nm{background:#0f172a;color:#e2e8f0}
+html[data-theme="dark"] body.role-teacher .rvrow.rowf{background:#172554}
+
+/* 테마 설정 모달 */
+.theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin:8px 0 16px}
+.theme-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px;border:2px solid var(--line);border-radius:14px;background:var(--card);text-align:left;transition:border-color .15s,transform .15s}
+.theme-card:hover{border-color:var(--acc);transform:translateY(-1px)}
+.theme-card.on{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc2)}
+.theme-swatches{display:flex;gap:5px}
+.theme-swatches i{width:20px;height:20px;border-radius:6px;border:1px solid rgba(0,0,0,.15);display:inline-block}
+.theme-card b{font-size:15px}
+.theme-card span{font-size:12px;color:var(--muted)}
+
+/* 인쇄는 어떤 테마든 항상 깨끗한 라이트 출력 */
+@media print{
+  html[data-theme],html[data-theme] body{--bg:#fff;--card:#fff;--ink:#111;--muted:#555;--line:#ccc;background:#fff!important;color:#111!important}
 }
