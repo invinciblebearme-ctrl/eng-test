@@ -18,6 +18,7 @@
 <header class="top"><div class="wrap"><h1><span class="dag">†</span> 교사용 · 2학기 영어</h1>
   <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2h6v4H9z"/><path d="M9 11h6"/><path d="M9 15h4"/></svg> 채점·성적</button><button class="tab" data-v="review"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5.1"/></svg> 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M8 17v-5"/><path d="M13 17V9"/><path d="M18 17v-8"/></svg> 분석</button><button class="tab" data-v="pandora"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg> 판도라의 상자</button><button class="tab" data-v="links"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/></svg> 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
   <span id="aijob" class="small" role="status" aria-live="polite"></span>
+  <button id="backW" class="btn sm ghost" hidden title="채점 위젯으로 돌아가기">← 위젯</button>
   <button id="themeBtn" class="btn sm ghost" hidden title="교사·학생 화면 테마 설정"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.2-1.8 3.5-3.5 3.5H16a2 2 0 0 0-2 2c0 1.4.8 2.5.8 3.2 0 .8-.7 1.3-2.8 1.3z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/></svg> 테마</button>
   <button id="widgetBtn" class="btn sm ghost" hidden title="맥·윈도우 데스크탑 위젯 연결"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg> 위젯</button>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
@@ -117,7 +118,7 @@ async function openWidgetModal() {
       draw(r.keys); statusMsg(st, '', '');
       box.querySelector('#wgNew').innerHTML = `<div class="notice" style="margin-top:10px"><b>${esc(r.label)}</b> 연결 코드 — 지금 한 번만 보여요. 위젯 설정에 붙여 넣어 주세요.
         <div class="bar" style="gap:6px;margin-top:6px"><input class="field" id="wgCode" readonly value="${esc(r.key)}" style="flex:1;min-width:0;font-family:ui-monospace,monospace;font-size:13px"><button class="btn sm" id="wgCopy">${ico('copy', 15)} 복사</button></div>
-        <div class="bar" style="gap:12px;margin-top:10px;align-items:center"><div style="width:120px;height:120px;background:#fff;border-radius:8px;flex:none">${qrSVG(location.origin + '/w#k=' + r.key, 4)}</div>
+        <div class="bar" style="gap:12px;margin-top:10px;align-items:center"><div style="width:120px;height:120px;background:#fff;border-radius:8px;flex:none">${qrSVG(location.origin + '/teacher/w#k=' + r.key, 4)}</div>
         <span class="small"><b>휴대폰이면</b> 카메라로 이 QR을 찍어 열고, 그 화면에서 <b>홈 화면에 추가</b>하세요. 코드가 아이콘에 함께 담겨 다시 넣지 않아도 돼요.</span></div></div>`;
       box.querySelector('#wgCopy').onclick = async () => toast((await copyText(r.key)) ? '복사했어요' : '복사하지 못했어요. 칸을 눌러 직접 복사해 주세요.', 'ok');
       box.querySelector('#wgCode').onfocus = (e) => e.target.select();
@@ -125,6 +126,8 @@ async function openWidgetModal() {
   };
 }
 $('#widgetBtn').onclick = openWidgetModal;
+// 위젯 앱(휴대폰)에서 '교사 화면 열기'로 들어왔으면 돌아가는 버튼 (앱 창에는 뒤로 가기 버튼이 없을 수 있음)
+try { if (sessionStorage.getItem('engw-from')) { $('#backW').hidden = false; $('#backW').onclick = () => { location.href = '/teacher/w'; }; } } catch {}
 
 function login(msg) {
   app.innerHTML = `<div class="center-screen"><h2>교사 로그인</h2><p class="lead">3·4학년 2학기 영어 채점</p>

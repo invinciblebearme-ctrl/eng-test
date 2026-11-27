@@ -286,13 +286,24 @@ export default {
         if (p === '/' || p === '/index.html' || /^\/t\/\d+\/?$/.test(p)) return text(STUDENT_HTML, 'text/html');   // /t/25 = 그 시험 바로 열기
         if (p === '/qr.js') return new Response(QR_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=604800' } });
         if (p === '/teacher' || p === '/teacher/') return text(TEACHER_HTML, 'text/html');
-        if (p === '/w' || p === '/w/') return text(WIDGET_HTML, 'text/html');
+        // 🖥️ 위젯 화면 (휴대폰 홈 화면·Tauri 앱과 같은 화면). 교사 앱(PWA) 범위 /teacher 안에 두어, 위젯 앱에서 '교사 화면 열기'가 앱 안에서 열림
+        if (p === '/teacher/w' || p === '/teacher/w/') return text(WIDGET_HTML, 'text/html');
+        if (p === '/w' || p === '/w/') return new Response(null, { status: 301, headers: { location: '/teacher/w' } });   // 예전 주소·아이콘 (# 뒤 코드는 브라우저가 이어 붙임)
+        // 위젯 앱 설치 정보: ?k=코드 가 있으면 시작 주소에 #k=코드 를 넣어, 설치한 아이콘으로 열면 저장소가 비어도 다시 연결
+        if (p === '/teacher/w.webmanifest') {
+          const k = /^ew1\.[A-Za-z0-9_-]{40,}$/.test(url.searchParams.get('k') || '') ? url.searchParams.get('k') : '';
+          return new Response(JSON.stringify({
+            id: '/teacher/w', name: '영어 채점 위젯', short_name: '영어 채점', lang: 'ko', start_url: '/teacher/w' + (k ? '#k=' + k : ''), scope: '/teacher', display: 'standalone',
+            background_color: '#F6F5F1', theme_color: '#F6F5F1', description: '채점 대기·AI 제안·미공개·오늘 제출 건수',
+            icons: [{ src: '/img/app-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/img/app-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/img/app-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
+          }), { headers: { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-store' } });
+        }
         // 📱 교사 화면 앱 설치(PWA): 휴대폰 '홈 화면에 추가', 맥 Safari 'Dock에 추가'·Chrome '앱 설치'
         if (p === '/teacher.webmanifest') return new Response(JSON.stringify({
           id: '/teacher', name: '영어 채점 · 교사', short_name: '영어 교사', lang: 'ko', start_url: '/teacher', scope: '/teacher', display: 'standalone',
           background_color: '#f4efe7', theme_color: '#f4efe7', description: '3·4학년 영어 채점·검토·공개',
           icons: [{ src: '/img/app-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/img/app-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/img/app-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
-        }), { headers: { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'public, max-age=3600' } });   // 🖥️ 위젯 화면 (휴대폰 홈 화면·Tauri 앱과 같은 화면)
+        }), { headers: { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
         if (p === '/style.css') return text(STYLE_CSS, 'text/css');
         if (p === '/common.js') return text(COMMON_JS, 'text/javascript');
         if (p.startsWith('/img/')) {

@@ -262,8 +262,15 @@ delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = nu
   ok(s1.status === 200 && g4 && g4.classes.length && 'wait' in g4.total && s1.d.label === '맥', '위젯 숫자: 학년·반별', s1.d);
   ok(!JSON.stringify(s1.d).includes('가짜'), '위젯 숫자에 학생 이름 없음');
   ok((await W(mk.d.key, 'OPTIONS')).status === 204, '위젯: OPTIONS 204');
-  const wp = await worker.fetch(new Request('http://w.local/w'), env), wh = await wp.text();
-  ok(wp.status === 200 && wh.includes('/api/w/summary') && wh.includes('영어 채점'), '위젯 화면 /w');
+  const wp = await worker.fetch(new Request('http://w.local/teacher/w'), env), wh = await wp.text();
+  ok(wp.status === 200 && wh.includes('/api/w/summary') && wh.includes('영어 채점') && wh.includes('/teacher/w.webmanifest'), '위젯 화면 /teacher/w (앱 설치 정보 연결)');
+  const old = await worker.fetch(new Request('http://w.local/w'), env);
+  ok(old.status === 301 && old.headers.get('location') === '/teacher/w', '예전 /w 주소는 /teacher/w 로');
+  const wk = 'ew1.' + 'a'.repeat(43);
+  let wm = await call('/teacher/w.webmanifest?k=' + wk);
+  ok(wm.status === 200 && wm.d.start_url === '/teacher/w#k=' + wk && wm.d.scope === '/teacher' && wm.d.display === 'standalone', '위젯 앱 설치 정보: 시작 주소에 코드, 범위는 교사 화면까지', wm.d);
+  wm = await call('/teacher/w.webmanifest?k=<script>');
+  ok(wm.d.start_url === '/teacher/w', '이상한 코드는 시작 주소에 안 넣음');
   // 교사 화면 앱 설치(PWA)
   const mf = await call('/teacher.webmanifest');
   ok(mf.status === 200 && mf.d.start_url === '/teacher' && mf.d.display === 'standalone' && mf.d.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'), 'PWA manifest: 교사 화면, 앱 창, 512 아이콘', mf.d);
