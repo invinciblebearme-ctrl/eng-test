@@ -71,8 +71,9 @@ const RECORD_SYSTEM = `초등학교 3~4학년 영어 교과의 생활기록부 '
 - 학생 이름, 점수, 숫자, 등급(상·중·하, 우수 등), 다른 학생과의 비교는 절대 쓰지 마.
 - 듣기·읽기·쓰기에서 관찰된 능력을 구체적인 낱말·표현과 함께 쓰고, 부족한 점은 성장 가능성으로 부드럽게 써.
 - 흔한 상투 문장을 피하고 이 학생에게만 맞는 내용으로 써.
+- [참고 예시]가 있으면 그 선생님의 문체·길이·구성(활동 → 능력 → 태도)을 따라 하되, 예시 문장을 그대로 옮기지 말고 이 학생의 자료에 맞게 새 문장으로 써.
 - 다른 말 없이 문구만 출력해.`;
 export async function recordDraft(env, info) {
-  const t = await callAI(env, info, 500, RECORD_SYSTEM);
+  const t = await callAI(env, info, 600, RECORD_SYSTEM);
   return String(t).replace(/```[a-z]*|```/g, '').replace(/^\s*["'“”]+|["'“”]+\s*$/g, '').replace(/\s+/g, ' ').trim().slice(0, 600);
 }

@@ -413,7 +413,21 @@ export default {
             `바르게 쓴 낱말·표현 예: ${good.join(', ') || '없음'}`,
             `자주 한 실수: ${ab.mistakes.map((m) => `${m.label}${m.ex[0] ? ` (예: ${m.ex[0].ans} → ${m.ex[0].key})` : ''}`).join('; ') || '없음'}`,
             `주별 변화: ${ab.trend.length > 1 ? (ab.trend[ab.trend.length - 1].rate >= ab.trend[0].rate ? '나아지고 있음' : '최근 조금 낮아짐') : '기록이 짧음'}`].join('\n');
-          let record = await recordDraft(env, info);
+          // 단원별 결과 + 선생님 평어 예시(app_settings: record_examples_<학년>) — 그 학생이 푼 단원만, 수준에 맞는 것(잘함/기본)
+          const byUnit = {};
+          for (const r of rows) { const c = conceptOf(r.concept), u = parseInt(c.unit, 10); if (!u) continue; const x = (byUnit[u] = byUnit[u] || { ok: 0, n: 0 }); x.n += r.marks.length; x.ok += r.marks.filter(Boolean).length; }
+          const units = Object.keys(byUnit).sort((a, b) => a - b);
+          let ex = [];
+          try {
+            const sr = await sb(env, `app_settings?select=value&key=eq.record_examples_${st.grade}`);
+            const bank = sr[0] ? JSON.parse(sr[0].value) : null, lv = ab.overall >= 75 ? 'good' : 'basic';
+            if (bank && bank.units) for (const u of units) { const list = (bank.units[u] && bank.units[u][lv]) || []; ex.push(...[...list].sort(() => Math.random() - 0.5).slice(0, 3)); }
+            ex = ex.slice(0, 9);
+          } catch { ex = []; }
+          const info2 = info + (units.length ? `\n단원별: ${units.map((u) => `${u}단원 ${word(Math.round(byUnit[u].ok / byUnit[u].n * 100))}`).join(', ')}` : '') + (ex.length ? `\n\n[참고 예시] (이 선생님이 쓰는 문체 — 그대로 베끼지 말 것)\n${ex.map((x) => '- ' + x).join('\n')}` : '');
+          const sents = (s) => s.split(/(?<=[.])\s*/).map((x) => x.trim()).filter(Boolean);
+          let record = await recordDraft(env, info2);
+          if (ex.length && sents(record).some((s) => ex.includes(s))) record = await recordDraft(env, info2 + '\n\n(주의: 방금처럼 예시 문장을 그대로 쓰지 말고 이 학생에 맞게 바꿔 써.)');
           record = record.split(st.name).join('').replace(/\s+/g, ' ').trim();
           if (!record) return fail('AI가 문구를 돌려주지 않았어요. 잠시 뒤 다시 해 주세요.', 502);
           const cur = await sb(env, `ability_notes?select=body,based_on&student_id=eq.${st.id}`);
