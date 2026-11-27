@@ -570,3 +570,88 @@ html[data-theme="dark"] body.role-teacher .rvrow.rowf{background:#172554}
 .pd-trend i{display:block;width:70%;max-width:34px;border-radius:6px 6px 0 0;background:var(--ok)}.pd-trend i.wait{background:var(--wait)}.pd-trend i.no{background:var(--no)}
 .pd-trend span{color:var(--muted)}
 .pd-note{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:8px 0}.pd-note p{margin:0;line-height:1.6}
+
+/* ---------- 교사 화면 다듬기 (Meta Astryx 디자인 원칙 참고: 모서리 단계·옅은 그림자·회색 표 머리·숫자 정렬·밑줄 탭) ----------
+   교사 화면(body.role-teacher)에만 적용. 색은 각 테마 변수(--bg·--card·--ink·--acc…)를 그대로 써서 모든 테마에 맞음. 학생 화면은 그대로 */
+body.role-teacher{--r-in:6px;--r-el:10px;--r-box:12px;--hover:color-mix(in srgb,var(--ink) 6%,transparent);--press:color-mix(in srgb,var(--ink) 10%,transparent);--ring:0 0 0 3px color-mix(in srgb,var(--acc) 28%,transparent);font-size:16px;-webkit-font-smoothing:antialiased}
+body.role-teacher :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+/* 머리줄: 1줄 = 제목 + 오른쪽 작은 버튼(테마·위젯·로그아웃), 2줄 = 밑줄 탭 (휴대폰은 옆으로 밀기) */
+body.role-teacher header.top{background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(12px);backdrop-filter:saturate(1.4) blur(12px)}
+body.role-teacher header.top .wrap{gap:4px 6px;padding-top:10px;padding-bottom:0}
+body.role-teacher header.top h1{order:0;font-size:16px;font-weight:700;letter-spacing:-.01em;min-width:0}
+body.role-teacher header.top .wrap > .btn{order:1;min-height:32px;padding:5px 10px;font-size:13px;border-radius:var(--r-el);border-color:transparent;background:transparent;color:var(--muted)}
+body.role-teacher header.top .wrap > .btn:hover{background:var(--hover);color:var(--ink);border-color:transparent}
+html body.role-teacher header.top nav.tabs{order:2;flex:1 0 100%;display:flex;flex-wrap:nowrap;gap:2px;overflow-x:auto;scrollbar-width:none;margin:2px -4px 0;padding:0 4px}
+body.role-teacher header.top nav.tabs::-webkit-scrollbar{display:none}
+html body.role-teacher header.top nav.tabs .tab{flex:none;display:inline-flex;align-items:center;gap:6px;border:none;border-radius:0;background:transparent;color:var(--muted);font-size:14.5px;font-weight:600;padding:9px 10px 11px;box-shadow:inset 0 -2px 0 transparent;transition:color .12s,box-shadow .12s}
+html body.role-teacher header.top nav.tabs .tab:hover{color:var(--ink);box-shadow:inset 0 -2px 0 var(--line)}
+html body.role-teacher header.top nav.tabs .tab.on{color:var(--ink);background:transparent;box-shadow:inset 0 -2px 0 var(--ink)}
+html body.role-teacher header.top nav.tabs .tab .ico{opacity:.8}
+/* 버튼: 높이·모서리 통일, 마우스를 올리면 테두리 대신 옅은 바탕 */
+body.role-teacher .btn{border-radius:var(--r-el);padding:8px 14px;min-height:38px;font-size:15px;line-height:1.3;transition:background-color .12s,border-color .12s,box-shadow .12s}
+body.role-teacher .btn.sm{min-height:32px;padding:5px 11px;font-size:13.5px;border-radius:8px}
+body.role-teacher .btn:hover:not(:disabled){border-color:color-mix(in srgb,var(--ink) 22%,var(--line));box-shadow:inset 0 0 0 100px var(--hover)}
+body.role-teacher .btn:active:not(:disabled){box-shadow:inset 0 0 0 100px var(--press)}
+body.role-teacher .btn.pri:hover:not(:disabled){border-color:var(--acc);box-shadow:inset 0 0 0 100px rgba(0,0,0,.08)}
+body.role-teacher .btn.ghost{border-color:transparent}
+body.role-teacher .btn.danger:hover:not(:disabled){border-color:var(--no)}
+/* 반·학년 고르기 등 작은 탭: 알약 대신 모서리 단계에 맞춤 */
+body.role-teacher main .tabs:not(.seg) .tab{border-radius:var(--r-el);padding:6px 12px;font-size:14.5px;min-height:34px}
+body.role-teacher .tabs.seg{border-radius:var(--r-el);background:var(--hover);padding:3px}
+body.role-teacher .tabs.seg .tab{border-radius:8px;padding:5px 12px;font-size:14.5px}
+body.role-teacher .tabs.seg .tab.on{background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px color-mix(in srgb,var(--ink) 6%,transparent)}
+/* 상자: 12px 모서리, 얇은 테두리, 그림자는 아주 옅게 */
+body.role-teacher .card,body.role-teacher .panel,body.role-teacher .today,body.role-teacher .stat,body.role-teacher .rvg,body.role-teacher .rvc,body.role-teacher .lk,body.role-teacher .side,body.role-teacher .pplist,body.role-teacher .rhead{border-radius:var(--r-box);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+body.role-teacher .today .tile{border-radius:var(--r-el)}
+body.role-teacher .stat{padding:12px 14px;gap:2px}
+body.role-teacher .stat b,body.role-teacher .today .tile b,body.role-teacher .rvg .cnt b,body.role-teacher .rscore{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+body.role-teacher .stat span{font-size:12.5px;font-weight:500}
+body.role-teacher .ctx{border-bottom-color:var(--line);gap:8px;background:color-mix(in srgb,var(--bg) 92%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+/* 표: 세로줄 없이 가로줄만, 머리는 작은 회색 글씨, 숫자는 자리 맞춤, 줄에 마우스 올리면 옅게 */
+body.role-teacher .mx,body.role-teacher table.plain,body.role-teacher .tbl{font-variant-numeric:tabular-nums}
+body.role-teacher .mx{border-radius:var(--r-box);font-size:13.5px}
+body.role-teacher .mx th{background:color-mix(in srgb,var(--ink) 4%,var(--card));color:var(--muted);font-weight:600;font-size:12.5px;padding:8px 7px;border-bottom:1px solid var(--line)}
+body.role-teacher .mx tbody tr:hover td{background-image:linear-gradient(var(--hover),var(--hover))}
+body.role-teacher .mx tr.avg td{background:color-mix(in srgb,var(--ink) 4%,var(--card))}
+body.role-teacher table.plain{border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:var(--r-el);overflow:hidden;font-size:14px}
+body.role-teacher table.plain td,body.role-teacher table.plain th{border:none;border-bottom:1px solid var(--line);padding:7px 12px}
+body.role-teacher table.plain tr:last-child td{border-bottom:none}
+body.role-teacher table.plain th{background:color-mix(in srgb,var(--ink) 4%,var(--card));color:var(--muted);font-weight:600;font-size:12.5px;text-align:left}
+body.role-teacher table.plain tbody tr:hover td{background-image:linear-gradient(var(--hover),var(--hover))}
+body.role-teacher .tbl{border:1px solid var(--line);border-collapse:separate;border-spacing:0;border-radius:var(--r-el)}
+body.role-teacher .tbl th,body.role-teacher .tbl td{border:none;border-bottom:1px solid var(--line)}
+body.role-teacher .tbl tr:last-child td{border-bottom:none}
+body.role-teacher .tbl tr.hd th{background:color-mix(in srgb,var(--ink) 4%,var(--card));color:var(--muted);font-size:12.5px}
+/* 배지: 둥근 네모 */
+body.role-teacher .badge{border-radius:var(--r-in);font-size:12px;font-weight:600;padding:2px 7px}
+/* 입력란: 같은 높이, 누르면 테두리 + 옅은 고리 */
+body.role-teacher .field,body.role-teacher select.field,body.role-teacher textarea{border-radius:var(--r-el);transition:border-color .12s,box-shadow .12s}
+body.role-teacher .field{min-height:38px;padding:7px 11px}
+body.role-teacher .field:focus,body.role-teacher textarea:focus{outline:none;border-color:var(--acc);box-shadow:var(--ring)}
+/* 창(모달)·알림 */
+body.role-teacher .modal{background:rgba(15,15,15,.38);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+body.role-teacher .modal .box{border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.22),0 0 0 1px color-mix(in srgb,var(--ink) 8%,transparent)}
+body.role-teacher #toasts .toast{border-radius:var(--r-el);font-size:14.5px;padding:9px 16px}
+body.role-teacher .side .si{border-radius:8px}
+body.role-teacher .side .si:hover{background:var(--hover)}
+@media(max-width:700px){
+  body.role-teacher header.top h1{font-size:15px}
+  body.role-teacher header.top .wrap > .btn{padding:4px 8px}
+  html body.role-teacher header.top nav.tabs .tab{font-size:14px;padding:8px 9px 10px}
+}
+@media print{body.role-teacher .modal{-webkit-backdrop-filter:none;backdrop-filter:none}}
+
+/* 교사 전용 테마 '모노' (Astryx Neutral 색: 회색 바탕·흰 상자·거의 검정 글씨와 주요 버튼) */
+html[data-theme="mono"] body.role-teacher{--bg:#f5f5f5;--card:#ffffff;--ink:#0a0a0a;--muted:#525252;--acc:#171717;--acc2:#e5e5e5;--dark:#262626;--line:#e5e5e5;--ok:#198100;--okbg:#e8f5e2;--no:#c9303a;--nobg:#fdeaea;--wait:#8a5a00;--waitbg:#fff6d6;--info:#0074e2;--infobg:#e8f1fd;--ai:#6d28d9;--aibg:#f1eafe}
+html[data-theme="mono"] body.role-teacher header.top h1 .dag{color:var(--muted)}
+html[data-theme="mono"] body.role-teacher .btn{background:#fff}
+html[data-theme="mono"] body.role-teacher .btn.pri{background:#171717;border-color:#171717;color:#fff}
+html[data-theme="mono"] body.role-teacher .btn.ghost{background:transparent}
+html[data-theme="mono"] body.role-teacher .tab.on{background:#171717;border-color:#171717}
+html[data-theme="mono"] body.role-teacher .tabs.seg .tab.on{background:#fff;color:#0a0a0a}
+html[data-theme="mono"] body.role-teacher .today .tile.warn{border-color:#f3dc8c}
+html[data-theme="mono"] body.role-teacher .today .tile.done{border-color:#bfe0b1}
+html[data-theme="mono"] body.role-teacher .linkbtn,html[data-theme="mono"] body.role-teacher .lkurl{color:#0074e2}
+html[data-theme="mono"]:has(body.role-teacher){background:#f5f5f5}
+html[data-theme="mono"] body.role-teacher .rvbar{background:rgba(245,245,245,.95)}
+html[data-theme="mono"] body.role-teacher .substate{background:#fafafa}
