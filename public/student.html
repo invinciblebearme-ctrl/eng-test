@@ -26,6 +26,43 @@ function setDraftSaveFailed(failed) {
     });
   }
 }
+// 개념 정리를 그림(PNG)으로 저장 — html2canvas는 누를 때만 불러옴
+let H2C;
+async function saveSummaryImage(c, btn) {
+  const el = document.getElementById('sum');
+  if (!el) return;
+  btn.disabled = true; const label = btn.innerHTML; btn.textContent = '그림 만드는 중…';
+  try {
+    if (!H2C) H2C = new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = '/h2c.js'; sc.onload = () => ok(window.html2canvas); sc.onerror = () => no(new Error('load')); document.head.appendChild(sc); });
+    const h2c = await H2C;
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
+    // 제목을 그림 위에 붙여서 찍기
+    const head = document.createElement('h2'); head.textContent = `개념 ${c.id} · ${c.title}`; head.style.margin = '0 0 12px';
+    el.prepend(head);
+    let canvas;
+    // 그림용 복제본: 넓은 폭(표가 잘리지 않게)·여백·그림자 없음
+    const W = 760;
+    const prep = (doc) => {
+      const x = doc.getElementById('sum');
+      if (!x) return;
+      Object.assign(x.style, { width: W + 'px', maxWidth: 'none', padding: '28px', boxSizing: 'border-box' });
+      x.querySelectorAll('*').forEach((n) => { n.style.boxShadow = 'none'; const cs = doc.defaultView.getComputedStyle(n); if (cs.overflowX !== 'visible') { n.style.overflow = 'visible'; n.style.maxWidth = 'none'; } });
+    };
+    try { canvas = await h2c(el, { backgroundColor: bg, scale: 2, width: W, windowWidth: W + 40, useCORS: true, logging: false, onclone: prep }); }
+    finally { head.remove(); }
+    const blob = await new Promise((ok) => canvas.toBlob(ok, 'image/png'));
+    if (!blob) throw new Error('blob');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `개념${c.id}_${String(c.title).replace(/[\\/:*?"<>|~]/g, '').replace(/\s+/g, '_').slice(0, 40)}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('그림으로 저장했어요. 다운로드 폴더를 확인해요.', 'ok');
+  } catch {
+    toast('그림을 만들지 못했어요. 화면을 캡처해서 저장해 주세요.', 'error');
+  } finally { btn.disabled = false; btn.innerHTML = label; }
+}
 const S = (path, body) => api(path, body, TOKEN).catch((e) => { if (e.status === 401 && TOKEN) { logout(false); } throw e; });
 
 function safeGetLS(k) {
@@ -506,7 +543,8 @@ async function concept(id) {
     try {
       const sumRes = await S(`/api/summary?concept=${id}`);
       if (seq !== VIEW_SEQ) return;
-      $('#sum').innerHTML = `<h3 class="grp">${ico('book', 18)} 정리 (${c.kind === 'concept' ? '확인 문제를 내서' : '시험을 내서'} 열렸어요)</h3>${fillSummary(sumRes.summary)}`;
+      $('#sum').innerHTML = `<h3 class="grp">${ico('book', 18)} 정리 (${c.kind === 'concept' ? '확인 문제를 내서' : '시험을 내서'} 열렸어요)</h3>${c.kind === 'concept' ? `<p data-html2canvas-ignore><button type="button" class="btn sm" id="sumSave">${ico('save', 14)} 개념 정리 그림으로 저장</button></p>` : ''}${fillSummary(sumRes.summary)}`;
+      if ($('#sumSave')) $('#sumSave').onclick = () => saveSummaryImage(c, $('#sumSave'));
     } catch {
       if (seq === VIEW_SEQ) $('#sum').innerHTML = '';
     }

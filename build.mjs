@@ -9,5 +9,5 @@ if (existsSync(imgDir)) {
   }
 }
 writeFileSync(new URL('./src/assets.js', import.meta.url),
-  `export const STUDENT_HTML = ${r('student.html')};\nexport const TEACHER_HTML = ${r('teacher.html')};\nexport const STYLE_CSS = ${r('style.css')};\nexport const COMMON_JS = ${r('common.js')};\nexport const QR_JS = ${JSON.stringify(readFileSync(new URL('./node_modules/qrcode-generator/qrcode.js', import.meta.url), 'utf8'))};\nexport const XLSX_JS = ${JSON.stringify(readFileSync(new URL('./node_modules/xlsx/dist/xlsx.full.min.js', import.meta.url), 'utf8'))};\nexport const IMGS = ${JSON.stringify(imgs)};\n`);
+  `export const STUDENT_HTML = ${r('student.html')};\nexport const TEACHER_HTML = ${r('teacher.html')};\nexport const STYLE_CSS = ${r('style.css')};\nexport const COMMON_JS = ${r('common.js')};\nexport const QR_JS = ${JSON.stringify(readFileSync(new URL('./node_modules/qrcode-generator/qrcode.js', import.meta.url), 'utf8'))};\nexport const XLSX_JS = ${JSON.stringify(readFileSync(new URL('./node_modules/xlsx/dist/xlsx.full.min.js', import.meta.url), 'utf8'))};\nexport const H2C_JS = ${JSON.stringify(readFileSync(new URL('./node_modules/html2canvas/dist/html2canvas.min.js', import.meta.url), 'utf8'))};\nexport const IMGS = ${JSON.stringify(imgs)};\n`);
 console.log('built src/assets.js');

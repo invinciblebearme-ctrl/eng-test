@@ -1,7 +1,7 @@
 import { CONCEPTS, UNITS, gradeOne, answerText, publicConcepts } from './content.js';
 import { aiGrade } from './ai.js';
 import { aiTargets } from './triage.js';
-import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS, IMGS } from './assets.js';
+import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS, H2C_JS, IMGS } from './assets.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (msg, status = 400, extra) => json({ error: msg, ...(extra || {}) }, status);
@@ -233,6 +233,7 @@ export default {
           return new Response(bin, { headers: { 'content-type': ct, 'cache-control': 'public, max-age=604800' } });
         }
         if (p.startsWith('/media/')) return media(req, env, url);
+        if (p === '/h2c.js') return new Response(H2C_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=604800' } });
         if (p === '/xlsx.js') return new Response(XLSX_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=604800' } });
       }
       if (!p.startsWith('/api/')) return new Response('Not found', { status: 404 });
