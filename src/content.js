@@ -475,7 +475,8 @@ const parseTime = (s) => {
 // 우리말 뜻: 띄어쓰기·쉼표 등을 빼고 비교. 맞는 뜻을 쉼표·/로 여러 개 쓴 답(3, 셋)은 조각이 모두 인정 답이면 정답
 // (하나라도 틀린 뜻이 섞이면 오답 — 예: 40, 마흔 → fourteen 오답)
 function koOk(list, ans, strip) {
-  const k = (v) => norm(v).replace(strip, '');
+  // 넌→너는, 난→나는 (줄임말도 같은 말)
+  const k = (v) => norm(String(v ?? '').replace(/(^|\s)넌(?=\s)/g, '$1너는').replace(/(^|\s)난(?=\s)/g, '$1나는')).replace(strip, '');
   if (list.some((x) => k(x) === k(ans))) return true;
   const parts = String(ans ?? '').split(/[,/]/).map(k).filter(Boolean);
   return parts.length > 1 && parts.every((p) => list.some((x) => k(x) === p));

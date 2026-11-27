@@ -18,7 +18,7 @@ for (const c of CONCEPTS) {
   if (c.kind === 'word') console.log('   spell:', c.questions.filter((q) => q.t === 'spell').map((q) => fillPattern(q.pat, q.a)).join(', '));
 }
 // 변형 답 테스트
-const t = (cid, qi, a, exp) => { const r = gradeOne(CONCEPTS[cid - 1].questions[qi - 1], a); if (r !== exp) { bad++; console.log('VAR', cid, qi, a, r); } };
+const t = (cid, qi, a, exp) => { const r = gradeOne(CONCEPTS.find((c) => c.id === cid).questions[qi - 1], a); if (r !== exp) { bad++; console.log('VAR', cid, qi, a, r); } };
 t(1,1,' Wednesday ',true); t(2,3,'friday',false); t(2,1,'Fri.',true); t(2,1,'fri',false);
 t(5,2,'3000',true); t(5,5,'Two thousand won',true); t(5,5,'two thousands',false);
 t(8,4,"it isn't",true); t(8,4,'it is not',true); t(10,1,'4시 30분',true); t(10,5,'12',true); t(10,5,'12:00',true); t(10,1,'3:30',false);
@@ -30,7 +30,7 @@ t(1,1,'wednesday',false); t(1,1,'Wednesday',true); t(13,10,'watching tv',false);
 t(2,5,"It's Friday.",true); t(2,5,'Friday',true); t(2,5,"It's friday.",false); t(8,3,'is',true); t(8,10,'thank',true); t(9,4,['my','is'],true); t(8,5,['yes','is'],true); t(17,7,'Piano',true); t(17,12,['O','a'],true); t(17,12,['o','e'],false);
 t(18,18,'comicbook'.split(''),true); t(21,18,'watchTV'.split(''),true); t(21,18,'watchVT'.split(''),false); t(17,18,'Tuesday'.split(''),true);
 t(17,22,'날, 요일',true); t(18,1,'3,셋',true); t(18,1,'칠,7',false); t(18,3,'칠,7',true); t(20,5,'40,마흔',false); t(20,5,'십사, 14',true); t(19,1,'초록색,초록',true); t(21,2,'식탁/테이블',true); t(19,4,'보다,손목시계',false); t(19,5,'캡모자',false); t(17,5,'노래, 음악',false);
-t(23,3,['eleven','11, 열하나'],true); t(23,3,['eleven','11, 열둘'],false); t(19,25,'분홍색',true); t(18,9,'one thousand',true);
+t(23,3,['eleven','11, 열하나'],true); t(26,11,['Can you skate?','넌 스케이트를 탈수있니?'],true); t(26,11,['Can you skate?','너는 스케이트를 탈수 있어?'],true); t(26,13,['I can dance.','난 춤을 출 수 있어'],true); t(26,14,["I can't sing.",'나는 노래를 할수있어'],false); t(22,3,'난로',false); t(23,3,['eleven','11, 열둘'],false); t(19,25,'분홍색',true); t(18,9,'one thousand',true);
 t(24,1,['brother','오빠'],true); t(24,1,['brother',''],false); t(24,1,['bother','남자 형제'],false); t(24,2,['for','~를 위해'],true); t(24,2,['for','를위해'],true);
 t(24,11,['Who is she?','그녀는 누구니?'],true); t(24,12,["He's my dad.",'그는 내 아빠야.'],true); t(24,12,['he is my dad','그는 내 아빠야'],false); t(23,14,['It’s ten thirty.','10시 30분이야.'],true);
 console.log('pending answers:', pending.length, pending.join(' '));
