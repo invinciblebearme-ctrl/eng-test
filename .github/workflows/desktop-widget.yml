@@ -1,0 +1,47 @@
+name: desktop-widget
+# 영어 채점 위젯(Tauri) 설치 파일 만들기 — 윈도우(.msi, -setup.exe)와 맥(.app 압축)
+# 결과: Actions → 이 실행 → Artifacts 에서 내려받기 (서명 없음: 처음 열 때 경고가 뜸)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - widget/desktop/**
+      - public/widget.html
+      - .github/workflows/desktop-widget.yml
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            bundles: msi,nsis
+            out: |
+              widget/desktop/src-tauri/target/release/bundle/msi/*.msi
+              widget/desktop/src-tauri/target/release/bundle/nsis/*.exe
+          - os: macos-latest
+            name: macos
+            bundles: app
+            out: widget/desktop/src-tauri/target/release/bundle/macos/EngTestTray.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: widget/desktop/src-tauri }
+      - run: npm ci
+        working-directory: widget/desktop
+      - run: npx tauri build --bundles ${{ matrix.bundles }}
+        working-directory: widget/desktop
+      - if: matrix.name == 'macos'
+        run: ditto -c -k --keepParent EngTestTray.app EngTestTray.zip
+        working-directory: widget/desktop/src-tauri/target/release/bundle/macos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EngTestTray-${{ matrix.name }}
+          path: ${{ matrix.out }}
+          retention-days: 30

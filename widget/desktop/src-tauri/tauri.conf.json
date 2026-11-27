@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EngTestTray",
+  "version": "1.0.0",
+  "identifier": "kr.allforedu.engtest.desktop",
+  "build": {
+    "beforeDevCommand": "node copy-ui.mjs",
+    "beforeBuildCommand": "node copy-ui.mjs",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "영어 채점",
+        "width": 380,
+        "height": 600,
+        "minWidth": 320,
+        "minHeight": 420,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://eng-test.allforedu.kr; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Education",
+    "shortDescription": "영어 채점 대기·AI 제안·미공개 건수",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": { "languages": ["Korean"], "installMode": "currentUser" }
+    }
+  }
+}

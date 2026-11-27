@@ -255,6 +255,8 @@ delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = nu
   ok(s1.status === 200 && g4 && g4.classes.length && 'wait' in g4.total && s1.d.label === '맥', '위젯 숫자: 학년·반별', s1.d);
   ok(!JSON.stringify(s1.d).includes('가짜'), '위젯 숫자에 학생 이름 없음');
   ok((await W(mk.d.key, 'OPTIONS')).status === 204, '위젯: OPTIONS 204');
+  const wp = await worker.fetch(new Request('http://w.local/w'), env), wh = await wp.text();
+  ok(wp.status === 200 && wh.includes('/api/w/summary') && wh.includes('영어 채점'), '위젯 화면 /w');
   const mk2 = await call('/api/t/widget-keys', { label: '윈도우' }, tw);
   ok((await call('/api/t/widget-keys', null, tw)).d.keys.length === 2, '연결 2개');
   await call('/api/t/widget-key-delete', { id: mk.d.id }, tw);

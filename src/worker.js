@@ -2,7 +2,7 @@ import { CONCEPTS, UNITS, gradeOne, answerText, publicConcepts } from './content
 import { aiGrade, recordDraft } from './ai.js';
 import { aiTargets } from './triage.js';
 import { studentAbility, groupSummary, recordInput } from './ability.js';
-import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS, H2C_JS, IMGS } from './assets.js';
+import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, WIDGET_HTML, XLSX_JS, QR_JS, H2C_JS, IMGS } from './assets.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (msg, status = 400, extra) => json({ error: msg, ...(extra || {}) }, status);
@@ -286,6 +286,7 @@ export default {
         if (p === '/' || p === '/index.html' || /^\/t\/\d+\/?$/.test(p)) return text(STUDENT_HTML, 'text/html');   // /t/25 = 그 시험 바로 열기
         if (p === '/qr.js') return new Response(QR_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=604800' } });
         if (p === '/teacher' || p === '/teacher/') return text(TEACHER_HTML, 'text/html');
+        if (p === '/w' || p === '/w/') return text(WIDGET_HTML, 'text/html');   // 🖥️ 위젯 화면 (휴대폰 홈 화면·Tauri 앱과 같은 화면)
         if (p === '/style.css') return text(STYLE_CSS, 'text/css');
         if (p === '/common.js') return text(COMMON_JS, 'text/javascript');
         if (p.startsWith('/img/')) {

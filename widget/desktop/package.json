@@ -1,0 +1,14 @@
+{
+  "name": "engtest-desktop-widget",
+  "private": true,
+  "version": "1.0.0",
+  "description": "영어 채점 위젯 (맥·윈도우 트레이 앱) — 화면은 public/widget.html 을 그대로 씀",
+  "scripts": {
+    "ui": "node copy-ui.mjs",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
