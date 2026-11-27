@@ -118,7 +118,7 @@ export function studentAbility(st, subs, conceptOf) {
       items++; if (mark) right++;
       if (wk) { const w = (weeks[wk] = weeks[wk] || { ok: 0, n: 0 }); w.n++; if (mark) w.ok++; }
       for (const o of out) { dom[o.d].n++; if (o.ok) dom[o.d].ok++; }
-      for (const m of miss) { const x = (mk[m.kind] = mk[m.kind] || { n: 0, ex: [] }); x.n++; if (x.ex.length < 3 && m.ans != null && String(m.ans).trim()) x.ex.push({ ans: String(m.ans).slice(0, 40), key: String(m.key).slice(0, 40), set: c.kind === 'concept' ? `개념 ${c.id}` : c.title.slice(0, 20), n: i + 1 }); }
+      for (const m of miss) { const x = (mk[m.kind] = mk[m.kind] || { n: 0, ex: [] }); x.n++; if (m.kind !== 'blank' && x.ex.length < 3 && m.ans != null && String(m.ans).replace(/[,\s]/g, '')) x.ex.push({ ans: String(m.ans).slice(0, 40), key: String(m.key).slice(0, 40), set: c.kind === 'concept' ? `개념 ${c.id}` : c.title.slice(0, 20), n: i + 1 }); }
     });
   }
   const domains = {};
@@ -151,4 +151,29 @@ export function groupSummary(list) {
     mistakes: Object.entries(mk).map(([k, n]) => ({ k, label: MISTAKE_LABEL[k], n })).sort((a, b) => b.n - a.n).slice(0, 4),
     help: has.filter((s) => s.level === '도전').map((s) => ({ id: s.id, class_no: s.class_no, number: s.number, name: s.name, overall: s.overall })),
   };
+}
+
+// 생활기록부 문구 초안을 위한 AI 입력 (교사 버튼 /api/t/pandora-record 가 씀)
+// bank: app_settings record_examples_<학년> = {units: {"7": {basic: [...], good: [...]}}} — 학생이 푼 단원·수준에 맞는 예시를 섞어서 최대 9개
+export function recordInput(st, rows, conceptOf, bank, rand = Math.random) {
+  const ab = studentAbility(st, rows, conceptOf);
+  const word = (s) => (s == null ? '자료 부족' : s >= 85 ? '아주 잘함' : s >= 70 ? '잘함' : s >= 55 ? '보통' : '어려워함');
+  const good = [];
+  for (const r of rows) { const c = conceptOf(r.concept); if (!c) continue; c.questions.forEach((q, i) => { const a = r.answers && r.answers[i], v = Array.isArray(a) ? (q.t === 'spellmean' ? a[0] : q.t === 'order' ? a.join(' ') : '') : a; if (r.marks[i] && typeof v === 'string' && /[A-Za-z]{3,}/.test(v) && good.length < 12 && !good.includes(v.trim())) good.push(v.trim()); }); }
+  const sets = Object.entries(ab.sets).filter(([, n]) => n).map(([k, n]) => `${{ concept: '개념 확인 문제', word: '단어 시험', spelltest: '철자 시험', exam: '단원평가' }[k]} ${n}개`).join(', ');
+  const byUnit = {};
+  for (const r of rows) { const c = conceptOf(r.concept), u = c && parseInt(c.unit, 10); if (!u) continue; const x = (byUnit[u] = byUnit[u] || { ok: 0, n: 0 }); x.n += r.marks.length; x.ok += r.marks.filter(Boolean).length; }
+  const units = Object.keys(byUnit).sort((a, b) => a - b);
+  let ex = [];
+  if (bank && bank.units) { const lv = ab.overall >= 75 ? 'good' : 'basic'; for (const u of units) { const list = (bank.units[u] && bank.units[u][lv]) || []; ex.push(...[...list].sort(() => rand() - 0.5).slice(0, 3)); } }
+  ex = ex.slice(0, 9);
+  const info = [`${st.grade}학년 영어. 푼 시험: ${sets}.`,
+    `영역별: ${DOMAINS.map((d) => `${d.name} ${word(ab.domains[d.k].score)}`).join(' / ')}`,
+    `강점: ${ab.strong.map((x) => x.name).join(', ') || '뚜렷하지 않음'} · 보완: ${ab.weak.map((x) => x.name).join(', ') || '없음'}`,
+    `바르게 쓴 낱말·표현 예: ${good.join(', ') || '없음'}`,
+    `자주 한 실수: ${ab.mistakes.map((m) => `${m.label}${m.ex[0] ? ` (예: ${m.ex[0].ans} → ${m.ex[0].key})` : ''}`).join('; ') || '없음'}`,
+    `주별 변화: ${ab.trend.length > 1 ? (ab.trend[ab.trend.length - 1].rate >= ab.trend[0].rate ? '나아지고 있음' : '최근 조금 낮아짐') : '기록이 짧음'}`].join('\n')
+    + (units.length ? `\n단원별: ${units.map((u) => `${u}단원 ${word(Math.round(byUnit[u].ok / byUnit[u].n * 100))}`).join(', ')}` : '')
+    + (ex.length ? `\n\n[참고 예시] (이 선생님이 쓰는 문체 — 그대로 베끼지 말 것)\n${ex.map((x) => '- ' + x).join('\n')}` : '');
+  return { ab, info, ex };
 }

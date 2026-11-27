@@ -1,7 +1,7 @@
 import { CONCEPTS, UNITS, gradeOne, answerText, publicConcepts } from './content.js';
 import { aiGrade, recordDraft } from './ai.js';
 import { aiTargets } from './triage.js';
-import { studentAbility, groupSummary, DOMAINS } from './ability.js';
+import { studentAbility, groupSummary, recordInput } from './ability.js';
 import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS, H2C_JS, IMGS } from './assets.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -401,30 +401,10 @@ export default {
           if (!aiOn(env)) return fail('AI 설정(AI_API_URL, AI_API_KEY, AI_MODEL)이 아직 없어요', 503);
           const st = await getStudent(env, body.id, { teacher: true });
           const rows = (await sbAll(env, `submissions?select=concept,answers,auto,overrides,status,submitted_at&student_id=eq.${st.id}&status=eq.graded`)).filter((r) => conceptOf(r.concept) && conceptOf(r.concept).grade === st.grade).map((r) => ({ ...r, marks: marksOf(r) }));
-          const ab = studentAbility(st, rows, conceptOf);
+          let bank = null;
+          try { const sr = await sb(env, `app_settings?select=value&key=eq.record_examples_${st.grade}`); bank = sr[0] ? JSON.parse(sr[0].value) : null; } catch { bank = null; }
+          const { ab, info: info2, ex } = recordInput(st, rows, conceptOf, bank);
           if (ab.overall == null) return fail('확정된 결과가 아직 적어서 문구를 만들 수 없어요');
-          const word = (s) => (s == null ? '자료 부족' : s >= 85 ? '아주 잘함' : s >= 70 ? '잘함' : s >= 55 ? '보통' : '어려워함');
-          const good = [];   // 맞힌 영어 답 몇 개 (구체적인 낱말·표현)
-          for (const r of rows) { const c = conceptOf(r.concept); c.questions.forEach((q, i) => { const a = r.answers && r.answers[i], v = Array.isArray(a) ? (q.t === 'spellmean' ? a[0] : q.t === 'order' ? a.join(' ') : '') : a; if (r.marks[i] && typeof v === 'string' && /[A-Za-z]{3,}/.test(v) && good.length < 12 && !good.includes(v.trim())) good.push(v.trim()); }); }
-          const sets = Object.entries(ab.sets).filter(([, n]) => n).map(([k, n]) => `${{ concept: '개념 확인 문제', word: '단어 시험', spelltest: '철자 시험', exam: '단원평가' }[k]} ${n}개`).join(', ');
-          const info = [`${st.grade}학년 영어. 푼 시험: ${sets}.`,
-            `영역별: ${DOMAINS.map((d) => `${d.name} ${word(ab.domains[d.k].score)}`).join(' / ')}`,
-            `강점: ${ab.strong.map((x) => x.name).join(', ') || '뚜렷하지 않음'} · 보완: ${ab.weak.map((x) => x.name).join(', ') || '없음'}`,
-            `바르게 쓴 낱말·표현 예: ${good.join(', ') || '없음'}`,
-            `자주 한 실수: ${ab.mistakes.map((m) => `${m.label}${m.ex[0] ? ` (예: ${m.ex[0].ans} → ${m.ex[0].key})` : ''}`).join('; ') || '없음'}`,
-            `주별 변화: ${ab.trend.length > 1 ? (ab.trend[ab.trend.length - 1].rate >= ab.trend[0].rate ? '나아지고 있음' : '최근 조금 낮아짐') : '기록이 짧음'}`].join('\n');
-          // 단원별 결과 + 선생님 평어 예시(app_settings: record_examples_<학년>) — 그 학생이 푼 단원만, 수준에 맞는 것(잘함/기본)
-          const byUnit = {};
-          for (const r of rows) { const c = conceptOf(r.concept), u = parseInt(c.unit, 10); if (!u) continue; const x = (byUnit[u] = byUnit[u] || { ok: 0, n: 0 }); x.n += r.marks.length; x.ok += r.marks.filter(Boolean).length; }
-          const units = Object.keys(byUnit).sort((a, b) => a - b);
-          let ex = [];
-          try {
-            const sr = await sb(env, `app_settings?select=value&key=eq.record_examples_${st.grade}`);
-            const bank = sr[0] ? JSON.parse(sr[0].value) : null, lv = ab.overall >= 75 ? 'good' : 'basic';
-            if (bank && bank.units) for (const u of units) { const list = (bank.units[u] && bank.units[u][lv]) || []; ex.push(...[...list].sort(() => Math.random() - 0.5).slice(0, 3)); }
-            ex = ex.slice(0, 9);
-          } catch { ex = []; }
-          const info2 = info + (units.length ? `\n단원별: ${units.map((u) => `${u}단원 ${word(Math.round(byUnit[u].ok / byUnit[u].n * 100))}`).join(', ')}` : '') + (ex.length ? `\n\n[참고 예시] (이 선생님이 쓰는 문체 — 그대로 베끼지 말 것)\n${ex.map((x) => '- ' + x).join('\n')}` : '');
           const sents = (s) => s.split(/(?<=[.])\s*/).map((x) => x.trim()).filter(Boolean);
           let record = await recordDraft(env, info2);
           if (ex.length && sents(record).some((s) => ex.includes(s))) record = await recordDraft(env, info2 + '\n\n(주의: 방금처럼 예시 문장을 그대로 쓰지 말고 이 학생에 맞게 바꿔 써.)');
