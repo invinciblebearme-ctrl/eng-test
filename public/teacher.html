@@ -11,6 +11,7 @@
   <nav class="tabs" id="nav" hidden aria-label="교사 메뉴"><button class="tab on" data-v="grades"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2h6v4H9z"/><path d="M9 11h6"/><path d="M9 15h4"/></svg> 채점·성적</button><button class="tab" data-v="review"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5.1"/></svg> 검토·공개 <span class="badge" id="navWait" hidden></span></button><button class="tab" data-v="reports"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M8 17v-5"/><path d="M13 17V9"/><path d="M18 17v-8"/></svg> 분석</button><button class="tab" data-v="pandora"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg> 판도라의 상자</button><button class="tab" data-v="links"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/></svg> 시험 열기·링크</button><button class="tab" data-v="key">문제·정답</button><button class="tab" data-v="roster">명렬표</button></nav>
   <span id="aijob" class="small" role="status" aria-live="polite"></span>
   <button id="themeBtn" class="btn sm ghost" hidden title="교사·학생 화면 테마 설정"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.2-1.8 3.5-3.5 3.5H16a2 2 0 0 0-2 2c0 1.4.8 2.5.8 3.2 0 .8-.7 1.3-2.8 1.3z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/></svg> 테마</button>
+  <button id="widgetBtn" class="btn sm ghost" hidden title="맥·윈도우 데스크탑 위젯 연결"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg> 위젯</button>
   <button id="out" class="btn sm ghost" hidden>로그아웃</button></div></header>
 <div class="wrap tight"><div id="sysmsg"><div id="sysSchema"></div><div id="sysErr" aria-live="polite"></div></div><p class="tabhelp small muted" id="tabhelp"></p></div>
 <main class="wrap" id="app"></main>
@@ -25,7 +26,7 @@ let GRADE = +(localStorage.getItem('eng4-grade') || 4), CLASS_COUNT = { 3: 7, 4:
 let TOKEN = localStorage.getItem(LS), KEY = null, CLS = +(localStorage.getItem('eng4-cls') || 1), VIEW = 'grades', timer = null;
 const T = (path, body) => api(path, body, TOKEN).catch((e) => { if (e.status === 401) { logout(); } throw e; });
 
-function logout() { localStorage.removeItem(LS); TOKEN = null; RV.data = null; $('#nav').hidden = true; $('#out').hidden = true; $('#themeBtn').hidden = true; $('#tabhelp').textContent = ''; login(); }
+function logout() { localStorage.removeItem(LS); TOKEN = null; RV.data = null; $('#nav').hidden = true; $('#out').hidden = true; $('#themeBtn').hidden = true; $('#widgetBtn').hidden = true; $('#tabhelp').textContent = ''; login(); }
 $('#out').onclick = async () => { if (await leaveOK()) logout(); };
 $('#nav').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) go(b.dataset.v); };
 
@@ -81,6 +82,37 @@ async function openThemeModal() {
 }
 $('#themeBtn').onclick = openThemeModal;
 
+// 🖥️ 데스크탑 위젯 연결: 컴퓨터마다 연결 코드 하나 (읽기 전용, 숫자만). 코드는 만들 때 한 번만 보여 줌
+async function openWidgetModal() {
+  const sh = openModal(`<div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${ico('monitor', 20)} 데스크탑 위젯 연결</b><button class="btn sm" id="wgClose">닫기</button></div>
+    <p class="small muted" style="margin:4px 0 10px">맥·윈도우 위젯에 넣는 코드예요. 위젯은 <b>채점 대기·AI 제안·피드백 미공개·오늘 제출 건수</b>만 보여 주고, 학생 이름은 보이지 않아요. 코드로는 아무것도 바꿀 수 없어요.</p>
+    <div class="bar" style="gap:6px"><input id="wgLabel" class="field" maxlength="20" placeholder="컴퓨터 이름 (예: 교실 맥북)" style="flex:1;min-width:0"><button class="btn pri sm" id="wgMake">${ico('plus', 15)} 연결 코드 만들기</button></div>
+    <div id="wgNew"></div><div id="wgList" style="margin-top:10px"></div><div id="wgStatus" class="small" style="min-height:22px"></div>`, { label: '데스크탑 위젯 연결' });
+  const box = sh.box, st = box.querySelector('#wgStatus');
+  const when = (t) => (t ? new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '아직 안 씀');
+  const draw = (keys) => {
+    box.querySelector('#wgList').innerHTML = keys.length ? `<table class="plain small"><tr><th>컴퓨터</th><th>만든 때</th><th>마지막 사용</th><th></th></tr>${keys.map((k) => `<tr><td>${esc(k.label)}</td><td>${when(k.created_at)}</td><td>${when(k.last_used)}</td><td><button class="btn sm ghost" data-wgdel="${esc(k.id)}">끊기</button></td></tr>`).join('')}</table>` : '<p class="small muted">아직 연결된 컴퓨터가 없어요.</p>';
+    box.querySelectorAll('[data-wgdel]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('이 컴퓨터의 위젯 연결을 끊을까요? 끊으면 그 위젯은 바로 숫자를 못 받아요.')) return;
+      try { draw((await T('/api/t/widget-key-delete', { id: b.dataset.wgdel })).keys); toast('연결을 끊었어요', 'ok'); } catch (e) { statusMsg(st, e.message, 'error'); }
+    }));
+  };
+  box.querySelector('#wgClose').onclick = () => sh.close();
+  try { draw((await T('/api/t/widget-keys')).keys); } catch (e) { statusMsg(st, e.message, 'error'); }
+  box.querySelector('#wgMake').onclick = async () => {
+    statusMsg(st, '만드는 중…', 'saving');
+    try {
+      const r = await T('/api/t/widget-keys', { label: box.querySelector('#wgLabel').value });
+      draw(r.keys); statusMsg(st, '', '');
+      box.querySelector('#wgNew').innerHTML = `<div class="notice" style="margin-top:10px"><b>${esc(r.label)}</b> 연결 코드 — 지금 한 번만 보여요. 위젯 설정에 붙여 넣어 주세요.
+        <div class="bar" style="gap:6px;margin-top:6px"><input class="field" id="wgCode" readonly value="${esc(r.key)}" style="flex:1;min-width:0;font-family:ui-monospace,monospace;font-size:13px"><button class="btn sm" id="wgCopy">${ico('copy', 15)} 복사</button></div></div>`;
+      box.querySelector('#wgCopy').onclick = async () => toast((await copyText(r.key)) ? '복사했어요' : '복사하지 못했어요. 칸을 눌러 직접 복사해 주세요.', 'ok');
+      box.querySelector('#wgCode').onfocus = (e) => e.target.select();
+    } catch (e) { statusMsg(st, e.message, 'error'); }
+  };
+}
+$('#widgetBtn').onclick = openWidgetModal;
+
 function login(msg) {
   app.innerHTML = `<div class="center-screen"><h2>교사 로그인</h2><p class="lead">3·4학년 2학기 영어 채점</p>
   <form id="f" class="card"><label class="small muted">교사 비밀번호</label>
@@ -98,7 +130,7 @@ async function boot() {
   try { KEY = (await T('/api/t/key')).concepts;
     try { for (const v of Object.values((await T('/api/t/roster-check')).classes)) CLASS_COUNT[v.grade] = Math.max(CLASS_COUNT[v.grade] || 0, v.class_no); } catch {} } catch (e) { if (e.status !== 401) app.innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
   await loadClosed();
-  $('#nav').hidden = false; $('#out').hidden = false; $('#themeBtn').hidden = false; go('grades');
+  $('#nav').hidden = false; $('#out').hidden = false; $('#themeBtn').hidden = false; $('#widgetBtn').hidden = false; go('grades');
   // DB 업그레이드 확인 (안 됐으면 저장 기능이 멈추므로 위에 계속 알림)
   T('/api/t/schema').then((r) => { $('#sysSchema').innerHTML = r.ok ? '' : `<div class="notice" role="alert">${ico('warn', 15)} ${esc(r.message)}</div>`; }).catch(() => {});
   checkErrors(); setInterval(() => { if (TOKEN && !document.hidden) checkErrors(); }, 5 * 60000);

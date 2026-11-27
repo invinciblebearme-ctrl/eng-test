@@ -214,6 +214,69 @@ async function answerCounts(env, ids) {
 }
 
 // ---------- 라우터 ----------
+// 오늘 할 일: 학년의 반별 채점 대기 / AI 제안 검토 / 피드백 미공개 / 미제출(열린 시험 전체 기준) / 오늘(한국 시각) 제출
+async function todayClasses(env, g) {
+  const v = await schemaV(env);
+  const students = await sbAll(env, `students?select=id,class_no&grade=eq.${g}${activeQ(v)}`);
+  if (!students.length) return [];
+  const ids = students.map((s) => s.id), cls = Object.fromEntries(students.map((s) => [s.id, s.class_no]));
+  const [rows, closed] = await Promise.all([Promise.all(chunks(ids).map((part) => sbAll(env, `submissions?select=id,student_id,concept,status,ai,feedback,feedback_draft,reviewed_at,submitted_at&student_id=in.(${part.join(',')})`))).then((x) => x.flat()), closedSet(env)]);
+  const openIds = new Set(CONCEPTS.filter((c) => c.grade === g && !closed.has(c.id)).map((c) => c.id));
+  const KST = 9 * 3600e3, dayStart = Math.floor((Date.now() + KST) / 86400e3) * 86400e3 - KST;
+  const by = {};
+  for (const s of students) (by[s.class_no] = by[s.class_no] || { class_no: s.class_no, students: 0, wait: 0, aiSuggest: 0, unpub: 0, missing: 0, today: 0, sets: {} }).students++;
+  for (const r of rows) {
+    const b = by[cls[r.student_id]]; if (!b) continue;
+    if (r.status !== 'graded') { b.wait++; if (r.ai && !r.reviewed_at) b.aiSuggest++; }
+    else if (!r.feedback && r.feedback_draft) b.unpub++;
+    if (r.submitted_at && Date.parse(r.submitted_at) >= dayStart) b.today++;
+    if (openIds.has(r.concept)) b.sets[r.concept] = (b.sets[r.concept] || 0) + 1;
+  }
+  return Object.values(by).sort((a, b) => a.class_no - b.class_no).map(({ sets, ...b }) => ({ ...b, missing: [...openIds].reduce((a, id) => a + b.students - (sets[id] || 0), 0), openSets: openIds.size }));
+}
+
+// ---------- 🖥️ 데스크탑 위젯 (맥·윈도우) ----------
+// 위젯은 교사 비밀번호·교사 토큰 대신 '위젯 연결 코드'를 씀: 읽기 전용, /api/w/summary 하나만, 숫자만(학생 이름 없음).
+// app_settings.widget_keys = [{id, label, hash(SHA-256), created_at, last_used}] — 코드 원문은 저장하지 않음. 최대 5개, 끊으면 바로 못 씀.
+const WIDGET_MAX = 5, WCACHE = { keys: {}, sum: {} };
+const sha256hex = async (s) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function widgetKeys(env) {
+  try { const r = await sb(env, 'app_settings?select=value&key=eq.widget_keys'); const v = r[0] ? JSON.parse(r[0].value) : []; return Array.isArray(v) ? v : []; }
+  catch (e) { if (e.status === 503 || e.status === 404) return []; throw e; }
+}
+async function saveWidgetKeys(env, list) {
+  WCACHE.keys = {};
+  await sb(env, 'app_settings?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [{ key: 'widget_keys', value: JSON.stringify(list), updated_at: new Date().toISOString() }] });
+}
+// 맞는 코드면 그 항목, 아니면 null. 코드 목록은 30초 기억 (끊은 코드는 saveWidgetKeys가 기억을 비워서 바로 막힘)
+async function widgetFrom(env, req) {
+  const t = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!/^ew1\.[A-Za-z0-9_-]{40,}$/.test(t)) return null;
+  const c = WCACHE.keys[env.SUPABASE_URL];
+  const list = c && Date.now() - c.at < 30e3 ? c.list : await widgetKeys(env);
+  if (!c || c.list !== list) WCACHE.keys[env.SUPABASE_URL] = { at: Date.now(), list };
+  const h = await sha256hex(t);
+  return list.find((k) => safeEqual(k.hash, h)) || null;
+}
+// 위젯 숫자: 3·4학년 반별 대기·AI 제안·미공개·오늘 제출 + 24시간 오류 수. 1분 기억 (위젯이 자주 물어도 DB 부담 없게)
+async function widgetSummary(env) {
+  const c = WCACHE.sum[env.SUPABASE_URL];
+  if (c && Date.now() - c.at < 60e3) return c.data;
+  const grades = await Promise.all([3, 4].map(async (grade) => {
+    const classes = (await todayClasses(env, grade)).map(({ class_no, students, wait, aiSuggest, unpub, today }) => ({ class_no, students, wait, aiSuggest, unpub, today }));
+    const total = { wait: 0, aiSuggest: 0, unpub: 0, today: 0 };
+    for (const k of Object.keys(total)) total[k] = classes.reduce((a, x) => a + x[k], 0);
+    return { grade, classes, total };
+  }));
+  let errors24h = null;
+  try { errors24h = (await sb(env, `error_log?select=id&at=gte.${new Date(Date.now() - 86400e3).toISOString()}&limit=1`, { count: true })).total ?? 0; } catch { errors24h = null; }
+  const data = { at: new Date().toISOString(), grades, errors24h };
+  WCACHE.sum[env.SUPABASE_URL] = { at: Date.now(), data };
+  return data;
+}
+const WCORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization', 'access-control-allow-methods': 'GET, OPTIONS', 'access-control-max-age': '86400' };
+const withCors = (r) => { for (const [k, v] of Object.entries(WCORS)) r.headers.set(k, v); return r; };
+
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
@@ -241,6 +304,18 @@ export default {
 
       const missing = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'TEACHER_PASSWORD'].filter((k) => !env[k]);
       if (missing.length) return fail('아직 설정이 끝나지 않았어요 (' + missing.join(', ') + ' 필요). 선생님께 말씀드려요.', 503);
+
+      // 🖥️ 위젯: 연결 코드로 숫자만 (CORS 허용 — 쿠키 없이 코드만 쓰므로 안전)
+      if (p.startsWith('/api/w/')) {
+        if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: WCORS });
+        if (p === '/api/w/summary' && req.method === 'GET') {
+          const k = await widgetFrom(env, req);
+          if (!k) return withCors(fail('위젯 연결 코드가 맞지 않거나 끊겼어요. 교사 화면에서 새 코드를 만들어 넣어 주세요.', 401));
+          if (!k.last_used || Date.now() - Date.parse(k.last_used) > 3600e3) later(ctx, widgetKeys(env).then((list) => { const x = list.find((y) => y.id === k.id); if (x) { x.last_used = new Date().toISOString(); return saveWidgetKeys(env, list); } }).catch(() => {}));
+          return withCors(json({ ...(await widgetSummary(env)), label: k.label }));
+        }
+        return withCors(new Response('Not found', { status: 404 }));
+      }
 
       const body = req.method === 'POST' && p !== '/api/t/media' ? await req.json().catch(() => ({})) : {};
       const q = url.searchParams;
@@ -420,6 +495,27 @@ export default {
           await sb(env, 'ability_notes?on_conflict=student_id', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [{ student_id: st.id, body: bodyNew, based_on: (cur[0] && cur[0].based_on) || null, updated_at: at }] });
           return json({ ok: true, record, record_at: at });
         }
+        // 🖥️ 위젯 연결 코드 목록·만들기·끊기 (코드 원문은 만들 때 한 번만 보여 줌)
+        if (p === '/api/t/widget-keys') {
+          let list = await widgetKeys(env);
+          if (req.method === 'POST') {
+            if (list.length >= WIDGET_MAX) return fail(`위젯 연결은 ${WIDGET_MAX}개까지예요. 안 쓰는 연결을 먼저 끊어 주세요.`);
+            const label = String(body.label || '').trim().slice(0, 20) || '내 컴퓨터';
+            const key = 'ew1.' + b64u(crypto.getRandomValues(new Uint8Array(32)));
+            const id = b64u(crypto.getRandomValues(new Uint8Array(6)));
+            list = [...list, { id, label, hash: await sha256hex(key), created_at: new Date().toISOString(), last_used: null }];
+            try { await saveWidgetKeys(env, list); }
+            catch (e) { if (e.status === 503) throw new HttpError('설정 표(app_settings)가 아직 없어요. Supabase SQL Editor에서 sql/upgrade-2026-11c-theme.sql을 실행해 주세요.', 503, { upgrade: true }); throw e; }
+            return json({ ok: true, id, label, key, keys: list.map(({ hash, ...x }) => x) });
+          }
+          return json({ keys: list.map(({ hash, ...x }) => x) });
+        }
+        if (p === '/api/t/widget-key-delete' && req.method === 'POST') {
+          const list = await widgetKeys(env), next = list.filter((k) => k.id !== String(body.id || ''));
+          if (next.length === list.length) return fail('그 연결을 찾을 수 없어요', 404);
+          await saveWidgetKeys(env, next);
+          return json({ ok: true, keys: next.map(({ hash, ...x }) => x) });
+        }
         if (p === '/api/t/schema') { const v = await schemaV(env, true); return json({ version: v, ok: v >= 2, message: v >= 2 ? '' : UPGRADE_MSG }); }
 
         if (p === '/api/t/overview') {
@@ -438,25 +534,7 @@ export default {
             history: hist.map((h) => ({ student_id: h.student_id, concept: h.concept, attempt: h.attempt, status: h.status, graded_at: h.graded_at, score: marksOf(h).filter(Boolean).length })), aiEnabled: aiOn(env) });
         }
         // 오늘 할 일: 학년의 반별 채점 대기 / AI 제안 검토 / 피드백 미공개 / 미제출(열린 시험 중 반에서 누군가 낸 것)
-        if (p === '/api/t/today') {
-          const g = int(q.get('grade')) || 4, v = await schemaV(env);
-          const students = await sbAll(env, `students?select=id,class_no&grade=eq.${g}${activeQ(v)}`);
-          if (!students.length) return json({ classes: [] });
-          const ids = students.map((s) => s.id), cls = Object.fromEntries(students.map((s) => [s.id, s.class_no]));
-          const [rows, closed] = await Promise.all([Promise.all(chunks(ids).map((part) => sbAll(env, `submissions?select=id,student_id,concept,status,ai,feedback,feedback_draft,reviewed_at&student_id=in.(${part.join(',')})`))).then((x) => x.flat()), closedSet(env)]);
-          const openIds = new Set(CONCEPTS.filter((c) => c.grade === g && !closed.has(c.id)).map((c) => c.id));
-          const by = {};
-          for (const s of students) (by[s.class_no] = by[s.class_no] || { class_no: s.class_no, students: 0, wait: 0, aiSuggest: 0, unpub: 0, missing: 0, sets: {} }).students++;
-          for (const r of rows) {
-            const b = by[cls[r.student_id]]; if (!b) continue;
-            if (r.status !== 'graded') { b.wait++; if (r.ai && !r.reviewed_at) b.aiSuggest++; }
-            else if (!r.feedback && r.feedback_draft) b.unpub++;
-            if (openIds.has(r.concept)) b.sets[r.concept] = (b.sets[r.concept] || 0) + 1;
-          }
-          // 미제출: 이 학년의 열린 시험 전체 기준 (아무도 안 낸 열린 시험도 셈)
-          const classes = Object.values(by).sort((a, b) => a.class_no - b.class_no).map(({ sets, ...b }) => ({ ...b, missing: [...openIds].reduce((a, id) => a + b.students - (sets[id] || 0), 0), openSets: openIds.size }));
-          return json({ classes });
-        }
+        if (p === '/api/t/today') return json({ classes: await todayClasses(env, int(q.get('grade')) || 4) });
         // 일괄 출력용: 한 반의 학생과 제출 답(자세히)
         if (p === '/api/t/report') {
           const c = int(q.get('class')), g = int(q.get('grade')) || 4; if (!c) return fail('반을 골라 주세요');

@@ -238,5 +238,30 @@ await call('/api/me', null, st);
 ok(tgSent.length === 1 && tgSent[0].body.chat_id === '123' && /\/api\/me/.test(tgSent[0].body.text) && !tgSent[0].body.text.includes('tg-SECRET'), '텔레그램: 한 번 보냄, 글에 토큰 없음', tgSent);
 delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = null;
 
+// ---------- 🖥️ 데스크탑 위젯 ----------
+{
+  fresh(); const tw = await T();
+  const W = async (key, method = 'GET') => { const r = await worker.fetch(new Request('http://w.local/api/w/summary', { method, headers: key ? { authorization: 'Bearer ' + key } : {} }), env); return { status: r.status, cors: r.headers.get('access-control-allow-origin'), d: await r.json().catch(() => null) }; };
+  ok((await W(null)).status === 401 && (await W(null)).cors === '*', '위젯: 코드 없으면 401 (CORS 머리 있음)');
+  ok((await W('ew1.' + 'a'.repeat(43))).status === 401, '위젯: 없는 코드 401');
+  ok((await W(tw)).status === 401, '위젯: 교사 토큰으로는 못 씀');
+  ok((await call('/api/t/widget-keys', { label: '맥' })).status === 401, '위젯 코드 만들기: 교사만');
+  const mk = await call('/api/t/widget-keys', { label: '맥' }, tw);
+  ok(mk.status === 200 && /^ew1\./.test(mk.d.key) && mk.d.keys.length === 1 && !('hash' in mk.d.keys[0]), '위젯 코드 만들기: 원문 한 번, 목록엔 해시 없음', mk.d);
+  const saved = mock.state.db.app_settings.find((x) => x.key === 'widget_keys');
+  ok(saved && !saved.value.includes(mk.d.key), 'DB에는 코드 원문이 없음');
+  const s1 = await W(mk.d.key);
+  const g4 = s1.d && s1.d.grades.find((g) => g.grade === 4);
+  ok(s1.status === 200 && g4 && g4.classes.length && 'wait' in g4.total && s1.d.label === '맥', '위젯 숫자: 학년·반별', s1.d);
+  ok(!JSON.stringify(s1.d).includes('가짜'), '위젯 숫자에 학생 이름 없음');
+  ok((await W(mk.d.key, 'OPTIONS')).status === 204, '위젯: OPTIONS 204');
+  const mk2 = await call('/api/t/widget-keys', { label: '윈도우' }, tw);
+  ok((await call('/api/t/widget-keys', null, tw)).d.keys.length === 2, '연결 2개');
+  await call('/api/t/widget-key-delete', { id: mk.d.id }, tw);
+  ok((await W(mk.d.key)).status === 401 && (await W(mk2.d.key)).status === 200, '끊은 코드는 바로 막히고 다른 코드는 그대로');
+  for (let i = 0; i < 4; i++) await call('/api/t/widget-keys', { label: 'x' + i }, tw);
+  ok((await call('/api/t/widget-keys', { label: 'over' }, tw)).status === 400, '위젯 연결은 5개까지');
+}
+
 console.log(n, 'checks;', bad ? bad + ' problems' : 'ALL OK');
 process.exit(bad ? 1 : 0);
