@@ -287,6 +287,8 @@ export default {
         if (p === '/qr.js') return new Response(QR_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=604800' } });
         if (p === '/teacher' || p === '/teacher/') return text(TEACHER_HTML, 'text/html');
         // 🖥️ 위젯 화면 (휴대폰 홈 화면·Tauri 앱과 같은 화면). 교사 앱(PWA) 범위 /teacher 안에 두어, 위젯 앱에서 '교사 화면 열기'가 앱 안에서 열림
+        // 📱 안드로이드 앱(widget/android)이 이 사이트의 공식 앱임을 알림 → 교사 화면이 주소창 없이 열림. 지문은 공개 정보(서명 키의 SHA-256)
+        if (p === '/.well-known/assetlinks.json') return new Response(JSON.stringify([{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: 'kr.allforedu.engtest.app', sha256_cert_fingerprints: ['85:7D:62:15:2F:A6:33:24:04:16:CF:5D:CD:F2:BD:43:AD:D4:F3:1B:3E:14:4E:1A:DE:EF:C7:31:77:42:FD:94'] } }]), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' } });
         if (p === '/teacher/w' || p === '/teacher/w/') return text(WIDGET_HTML, 'text/html');
         if (p === '/w' || p === '/w/') return new Response(null, { status: 301, headers: { location: '/teacher/w' } });   // 예전 주소·아이콘 (# 뒤 코드는 브라우저가 이어 붙임)
         // 위젯 앱 설치 정보: ?k=코드 가 있으면 시작 주소에 #k=코드 를 넣어, 설치한 아이콘으로 열면 저장소가 비어도 다시 연결

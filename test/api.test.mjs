@@ -271,6 +271,8 @@ delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = nu
   ok(wm.status === 200 && wm.d.start_url === '/teacher/w#k=' + wk && wm.d.scope === '/teacher' && wm.d.display === 'standalone', '위젯 앱 설치 정보: 시작 주소에 코드, 범위는 교사 화면까지', wm.d);
   wm = await call('/teacher/w.webmanifest?k=<script>');
   ok(wm.d.start_url === '/teacher/w', '이상한 코드는 시작 주소에 안 넣음');
+  const al = await call('/.well-known/assetlinks.json');
+  ok(al.status === 200 && al.d[0].target.package_name === 'kr.allforedu.engtest.app' && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(al.d[0].target.sha256_cert_fingerprints[0]), '안드로이드 앱 연결 정보(assetlinks)');
   // 교사 화면 앱 설치(PWA)
   const mf = await call('/teacher.webmanifest');
   ok(mf.status === 200 && mf.d.start_url === '/teacher' && mf.d.display === 'standalone' && mf.d.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'), 'PWA manifest: 교사 화면, 앱 창, 512 아이콘', mf.d);

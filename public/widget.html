@@ -135,6 +135,7 @@ input[type=text] { width: 100%; font: 13px ui-monospace, SFMono-Regular, Menlo, 
     <div class="card list" id="list" style="margin-top:12px"></div>
     <div id="msg" style="margin-top:12px"></div>
     <div class="foot" style="margin-top:12px"><button id="btnOpen">교사 화면 열기</button></div>
+    <div class="foot" style="margin-top:8px" id="androidRow" hidden><button id="btnAndroid">안드로이드 홈 화면 위젯에 연결</button></div>
   </main>
 
   <section class="card set" id="settings" hidden>
@@ -268,6 +269,16 @@ function keepInUrl(c) {
 { const m = location.hash.match(/k=(ew1\.[A-Za-z0-9_-]{40,})/);
   if (m) { if (localStorage.getItem(LS.code) !== m[1]) { localStorage.setItem(LS.code, m[1]); localStorage.removeItem(LS.last); } keepInUrl(m[1]); }
   else if (localStorage.getItem(LS.code)) keepInUrl(localStorage.getItem(LS.code)); }
+
+// 안드로이드(영어 교사 앱 설치됨): 이 기기에 저장된 연결 코드를 앱의 홈 화면 위젯에 넘김
+if (!TAURI && /Android/i.test(navigator.userAgent)) {
+  $('#androidRow').hidden = false;
+  $('#btnAndroid').onclick = () => {
+    const c = localStorage.getItem(LS.code) || '';
+    if (!c) { showSettings(); return; }
+    location.href = 'intent://connect?k=' + encodeURIComponent(c) + '#Intent;scheme=engtestw;package=kr.allforedu.engtest.app;S.browser_fallback_url=' + encodeURIComponent(location.origin + '/teacher/w') + ';end';
+  };
+}
 
 load();
 setInterval(() => { if (!document.hidden || TAURI) load(); }, 2 * 60 * 1000);   // 2분마다

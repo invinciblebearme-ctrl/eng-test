@@ -1,0 +1,49 @@
+name: android-app
+# 영어 교사 안드로이드 앱(교사 화면 + 홈 화면 위젯) APK 만들기
+# 서명 키는 GitHub 비밀값 ANDROID_KEYSTORE_B64(키 파일 base64)·ANDROID_KEYSTORE_PASS 에서만 꺼내 씀 (저장소에 넣지 않음)
+# 결과: Releases 의 'android-latest' 에 EngTest.apk (휴대폰에서 바로 내려받기) + Actions Artifacts
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - widget/android/**
+      - .github/workflows/android-app.yml
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 서명 키 꺼내기
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then echo "::error::GitHub 비밀값 ANDROID_KEYSTORE_B64·ANDROID_KEYSTORE_PASS 를 먼저 넣어 주세요"; exit 1; fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: APK 만들기
+        working-directory: widget/android
+        env:
+          ENGTEST_KEYSTORE: ${{ runner.temp }}/release.jks
+          ENGTEST_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -q
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/EngTest.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EngTest-android
+          path: ${{ runner.temp }}/EngTest.apk
+          retention-days: 30
+      - name: Releases 'android-latest' 에 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view android-latest >/dev/null 2>&1 || gh release create android-latest --prerelease --title "영어 교사 안드로이드 앱 (최신)" --notes "휴대폰에서 EngTest.apk 를 내려받아 설치하세요. 처음 한 번 '출처를 알 수 없는 앱 설치'를 허용해야 해요."
+          gh release upload android-latest "$RUNNER_TEMP/EngTest.apk" --clobber
+      - run: rm -f "$RUNNER_TEMP/release.jks"
+        if: always()

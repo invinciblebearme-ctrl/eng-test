@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+
+        <!-- 교사 화면: Chrome으로 주소창 없이 (사이트 /.well-known/assetlinks.json 으로 이 앱이 맞는지 확인) -->
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:label="@string/app_name"
+            android:exported="true">
+            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="https://eng-test.allforedu.kr/teacher" />
+            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/page" />
+            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/page" />
+            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="customtabs" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- 교사 화면·위젯 화면 링크(QR 포함)를 이 앱으로 -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="eng-test.allforedu.kr" android:pathPrefix="/teacher" />
+            </intent-filter>
+        </activity>
+
+        <!-- 위젯 연결: engtestw://connect?k=코드 (위젯 화면의 '홈 화면 위젯에 연결' 버튼) 또는 직접 붙여 넣기 -->
+        <activity
+            android:name=".ConnectActivity"
+            android:label="@string/connect_title"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.Dialog">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="engtestw" android:host="connect" />
+            </intent-filter>
+        </activity>
+
+        <receiver android:name=".WaitWidget" android:exported="true" android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <!-- 앱을 새로 깔면(업데이트) 위젯을 바로 다시 그림 -->
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/wait_widget_info" />
+        </receiver>
+    </application>
+</manifest>

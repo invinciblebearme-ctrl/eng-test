@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">영어 교사</string>
+    <string name="widget_name">영어 채점</string>
+    <string name="connect_title">위젯 연결</string>
+    <string name="asset_statements" translatable="false">[{ \"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": { \"namespace\": \"web\", \"site\": \"https://eng-test.allforedu.kr\" } }]</string>
+</resources>

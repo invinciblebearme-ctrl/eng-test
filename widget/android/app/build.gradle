@@ -1,0 +1,41 @@
+// 영어 교사 안드로이드 앱: 교사 화면(TWA, Chrome으로 주소창 없이) + 홈 화면 위젯(채점 대기 수)
+// 서명: 환경 변수 ENGTEST_KEYSTORE(파일 경로)·ENGTEST_KEYSTORE_PASS 가 있으면 그 키로(배포용, 키는 저장소에 넣지 않음), 없으면 디버그 키
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'kr.allforedu.engtest'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'kr.allforedu.engtest.app'
+        minSdk 26
+        targetSdk 35
+        // GitHub에서 만들 때마다 번호가 올라가 새 APK가 '업데이트'로 깔림
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger() + 1)
+        versionName '1.0.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+    def ks = System.getenv('ENGTEST_KEYSTORE')
+    signingConfigs {
+        if (ks) {
+            release {
+                storeFile file(ks)
+                storePassword System.getenv('ENGTEST_KEYSTORE_PASS')
+                keyAlias 'engtest'
+                keyPassword System.getenv('ENGTEST_KEYSTORE_PASS')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig ks ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}
