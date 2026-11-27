@@ -55,11 +55,16 @@ public class WaitWidget extends AppWidgetProvider {
         final PendingResult pr = goAsync();
         final Context app = context.getApplicationContext();
         new Thread(() -> {
-            try { draw(app, fetch(app)); } finally { pr.finish(); }
+            try {
+                Object[] r = fetch(app);
+                // 앱이 뒤에 있으면 휴대폰이 인터넷을 막기도 함 → 안드로이드가 인터넷을 열어 주는 작업(JobScheduler)으로 다시 시도
+                if ("offline".equals(r[0])) RefreshJob.schedule(app);
+                draw(app, r);
+            } finally { pr.finish(); }
         }).start();
     }
 
-    /** 결과: [상태, json] — 상태 ok / nocode / unauthorized / offline */
+    /** 결과: [상태, json, 실패 까닭] — 상태 ok / nocode / unauthorized / offline */
     static Object[] fetch(Context c) {
         String code = code(c);
         if (!validCode(code)) return new Object[]{"nocode", null};
@@ -72,7 +77,7 @@ public class WaitWidget extends AppWidgetProvider {
             con.setUseCaches(false);
             int st = con.getResponseCode();
             if (st == 401) return new Object[]{"unauthorized", null};
-            if (st != 200) return new Object[]{"offline", cached(c)};
+            if (st != 200) return new Object[]{"offline", cached(c), "서버 " + st};
             InputStream in = con.getInputStream();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[8192]; int n;
@@ -80,8 +85,12 @@ public class WaitWidget extends AppWidgetProvider {
             String body = out.toString("UTF-8");
             prefs(c).edit().putString("last", body).apply();
             return new Object[]{"ok", new JSONObject(body)};
+        } catch (java.net.SocketTimeoutException e) {
+            return new Object[]{"offline", cached(c), "시간 초과"};
+        } catch (java.net.UnknownHostException e) {
+            return new Object[]{"offline", cached(c), "인터넷 막힘"};
         } catch (Exception e) {
-            return new Object[]{"offline", cached(c)};
+            return new Object[]{"offline", cached(c), e.getClass().getSimpleName()};
         } finally { if (con != null) con.disconnect(); }
     }
 
@@ -120,7 +129,8 @@ public class WaitWidget extends AppWidgetProvider {
                 Date d = iso.parse(j.optString("at").substring(0, 19));
                 at = new SimpleDateFormat("HH:mm", Locale.KOREA).format(d);
             } catch (Exception ignored) {}
-            v.setTextViewText(R.id.updated, ("offline".equals(state) ? "연결 안 됨 · " : "") + at + " ↻");
+            String why = res.length > 2 && res[2] != null ? "(" + res[2] + ")" : "";
+            v.setTextViewText(R.id.updated, ("offline".equals(state) ? "연결 안 됨" + why + " · " : "") + at + " ↻");
         } else {
             v.setTextViewText(R.id.wait, "–");
             v.setTextViewText(R.id.grades, "");

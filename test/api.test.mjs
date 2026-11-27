@@ -262,6 +262,21 @@ delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = nu
   ok(s1.status === 200 && g4 && g4.classes.length && 'wait' in g4.total && s1.d.label === '맥', '위젯 숫자: 학년·반별', s1.d);
   ok(!JSON.stringify(s1.d).includes('가짜'), '위젯 숫자에 학생 이름 없음');
   ok((await W(mk.d.key, 'OPTIONS')).status === 204, '위젯: OPTIONS 204');
+  {
+    const now = new Date().toISOString();
+    mock.state.db.error_log = [{ id: 1, at: now, source: 'server', message: 'a' }, { id: 2, at: now, source: 'server', message: 'b' }];
+    mock.state.db.app_settings = mock.state.db.app_settings.filter((x) => x.key !== 'err_seen');
+    await call('/api/t/errors-seen', { id: 1 }, tw); // 숫자 기억(1분)을 비우려고
+    mock.state.db.app_settings = mock.state.db.app_settings.filter((x) => x.key !== 'err_seen');
+    const e1 = await W(mk.d.key);
+    ok(e1.d.errors24h === 2, '위젯 오류 수: 확인 전 2건', e1.d.errors24h);
+    await call('/api/t/errors-seen', { id: 2 }, tw);
+    const e2 = await W(mk.d.key);
+    ok(e2.d.errors24h === 0, "위젯 오류 수: 교사 화면에서 '확인함' 누르면 0 (바로 반영)", e2.d.errors24h);
+    mock.state.db.error_log.push({ id: 3, at: now, source: 'server', message: 'c' });
+    await call('/api/t/errors-seen', { id: 2 }, tw);
+    ok((await W(mk.d.key)).d.errors24h === 1, '위젯 오류 수: 확인 뒤 새 오류만 셈');
+  }
   const wp = await worker.fetch(new Request('http://w.local/teacher/w'), env), wh = await wp.text();
   ok(wp.status === 200 && wh.includes('/api/w/summary') && wh.includes('영어 채점') && wh.includes('/teacher/w.webmanifest'), '위젯 화면 /teacher/w (앱 설치 정보 연결)');
   const old = await worker.fetch(new Request('http://w.local/w'), env);

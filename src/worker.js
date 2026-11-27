@@ -269,7 +269,11 @@ async function widgetSummary(env) {
     return { grade, classes, total };
   }));
   let errors24h = null;
-  try { errors24h = (await sb(env, `error_log?select=id&at=gte.${new Date(Date.now() - 86400e3).toISOString()}&limit=1`, { count: true })).total ?? 0; } catch { errors24h = null; }
+  // 교사 화면에서 '확인함'을 누른 오류(err_seen 이하)는 빼고 셈
+  try {
+    let seen = 0; try { const r = await sb(env, 'app_settings?select=value&key=eq.err_seen'); seen = r[0] ? +r[0].value || 0 : 0; } catch {}
+    errors24h = (await sb(env, `error_log?select=id&at=gte.${new Date(Date.now() - 86400e3).toISOString()}&id=gt.${seen}&limit=1`, { count: true })).total ?? 0;
+  } catch { errors24h = null; }
   const data = { at: new Date().toISOString(), grades, errors24h };
   WCACHE.sum[env.SUPABASE_URL] = { at: Date.now(), data };
   return data;
@@ -482,6 +486,7 @@ export default {
           const id = int(body.id);
           if (!(id > 0)) return fail('id가 필요해요', 400);
           await sb(env, 'app_settings?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [{ key: 'err_seen', value: String(id), updated_at: new Date().toISOString() }] });
+          WCACHE.sum = {};
           return json({ ok: true, seen: id });
         }
         // 🎁 판도라의 상자: 학생 실력 (영역별 점수·단계·성취 수준). class 없으면 학년 전체. 기본은 확정된 결과만
