@@ -41,6 +41,55 @@ fn set_tray(app: AppHandle, title: String, tooltip: String) {
     }
 }
 
+/// 설치한 교사 화면 앱(PWA)을 찾음 — 맥: ~/Applications 의 Safari·Chrome·Edge 웹 앱, 윈도우: 시작 메뉴의 바로 가기
+/// 주소(eng-test.allforedu.kr/teacher)가 들어 있거나 이름에 '영어'와 '교사'가 함께 있으면 그 앱
+fn find_teacher_app() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let named = |p: &PathBuf| p.file_stem().map(|s| s.to_string_lossy().to_string()).map_or(false, |n| n.contains("영어") && n.contains("교사"));
+    let mut roots: Vec<PathBuf> = Vec::new();
+    #[cfg(target_os = "macos")]
+    let (ext, home) = ("app", std::env::var_os("HOME").map(PathBuf::from));
+    #[cfg(target_os = "macos")]
+    if let Some(h) = home { roots.push(h.join("Applications")); }
+    #[cfg(target_os = "windows")]
+    let ext = "lnk";
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(a) = std::env::var_os("APPDATA") { roots.push(PathBuf::from(a).join("Microsoft\\Windows\\Start Menu\\Programs")); }
+        if let Some(u) = std::env::var_os("USERPROFILE") { roots.push(PathBuf::from(u).join("Desktop")); }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let ext = "desktop";
+    // 두 단계까지 (예: ~/Applications/Chrome Apps.localized/영어 채점 · 교사.app, 시작 메뉴/Chrome 앱/…lnk)
+    let mut cands: Vec<PathBuf> = Vec::new();
+    for r in roots {
+        let Ok(rd) = std::fs::read_dir(&r) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.extension().map_or(false, |x| x == ext) { cands.push(p); }
+            else if p.is_dir() {
+                if let Ok(rd2) = std::fs::read_dir(&p) { for e2 in rd2.flatten() { let p2 = e2.path(); if p2.extension().map_or(false, |x| x == ext) { cands.push(p2); } } }
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    for p in &cands {
+        let out = std::process::Command::new("/usr/bin/plutil").args(["-convert", "xml1", "-o", "-"]).arg(p.join("Contents/Info.plist")).output();
+        if let Ok(o) = out { if String::from_utf8_lossy(&o.stdout).contains("eng-test.allforedu.kr/teacher") { return Some(p.clone()); } }
+    }
+    cands.into_iter().find(|p| named(p))
+}
+
+/// '교사 화면 열기': 설치한 교사 앱이 있으면 그 앱으로 열고 true, 없으면 false (화면이 브라우저로 엶)
+#[tauri::command]
+fn open_teacher(app: AppHandle) -> bool {
+    use tauri_plugin_opener::OpenerExt;
+    match find_teacher_app() {
+        Some(p) => app.opener().open_path(p.to_string_lossy().to_string(), None::<&str>).is_ok(),
+        None => false,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -49,7 +98,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![set_tray])
+        .invoke_handler(tauri::generate_handler![set_tray, open_teacher])
         .setup(|app| {
             // 맥: Dock에 아이콘 없이 메뉴 막대에만
             #[cfg(target_os = "macos")]
@@ -86,4 +135,24 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("영어 채점 위젯을 시작하지 못했어요");
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    // 가짜 ~/Applications 에 Chrome 웹 앱 모양을 만들어 찾는지 확인
+    #[test]
+    fn finds_teacher_pwa() {
+        let d = std::env::temp_dir().join(format!("engtray-test-{}", std::process::id()));
+        let app = d.join("Applications/Chrome Apps.localized/Teacher Thing.app/Contents");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::create_dir_all(d.join("Applications/Other.app/Contents")).unwrap();
+        std::fs::write(app.join("Info.plist"), r#"<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CrAppModeShortcutURL</key><string>https://eng-test.allforedu.kr/teacher</string></dict></plist>"#).unwrap();
+        std::env::set_var("HOME", &d);
+        assert!(super::find_teacher_app().map_or(false, |p| p.ends_with("Teacher Thing.app")), "주소로 찾기");
+        std::fs::remove_dir_all(d.join("Applications/Chrome Apps.localized")).unwrap();
+        assert!(super::find_teacher_app().is_none(), "없으면 None");
+        std::fs::create_dir_all(d.join("Applications/영어 교사.app")).unwrap();
+        assert!(super::find_teacher_app().map_or(false, |p| p.ends_with("영어 교사.app")), "이름으로 찾기");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 }

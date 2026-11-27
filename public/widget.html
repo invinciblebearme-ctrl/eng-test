@@ -229,7 +229,13 @@ $('#btnSave').onclick = async () => {
   catch (e) { $('#setMsg').innerHTML = `<div class="note err">${ICON_WARN}<span>${esc(e instanceof TypeError ? '인터넷 연결을 확인해 주세요' : e.message)}</span></div>`; }
 };
 $('#btnClear').onclick = () => { localStorage.removeItem(LS.code); localStorage.removeItem(LS.last); DATA = null; $('#code').value = ''; $('#sub').textContent = '연결 코드를 넣어 주세요'; tray({ wait: 0, aiSuggest: 0, unpub: 0 }); $('#setMsg').innerHTML = `<div class="note ok">${ICON_OK}<span>이 기기에서 코드를 지웠어요. 교사 화면에서도 '끊기'를 눌러 주세요.</span></div>`; };
-$('#btnOpen').onclick = () => { const u = SITE + '/teacher'; if (TAURI && TAURI.opener) TAURI.opener.openUrl(u).catch(() => {}); else window.open(u, '_blank'); };
+// 교사 화면 열기: 데스크탑 앱은 설치한 '영어 교사' 앱(PWA)을 먼저 찾아 열고, 없으면 브라우저로
+$('#btnOpen').onclick = async () => {
+  const u = SITE + '/teacher';
+  if (!TAURI) { window.open(u, '_blank'); return; }
+  try { if (await TAURI.core.invoke('open_teacher')) return; } catch {}
+  if (TAURI.opener) TAURI.opener.openUrl(u).catch(() => {});
+};
 
 // 앱(Tauri)에서만: 항상 위·자동 실행·알림
 if (TAURI) {
