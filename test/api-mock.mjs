@@ -12,6 +12,7 @@ const COLS = {
   test_settings: ['concept', 'enabled', 'updated_at'],
   app_settings: ['key', 'value', 'updated_at'],
   error_log: ['id', 'at', 'source', 'method', 'path', 'status', 'message', 'detail'],
+  ability_notes: ['student_id', 'body', 'based_on', 'updated_at'],
 };
 const V2_ONLY = { students: ['archived_at'], submissions: ['rev'] };
 const DEFAULTS = {
@@ -22,20 +23,21 @@ const DEFAULTS = {
   test_settings: () => ({ enabled: true, updated_at: new Date().toISOString() }),
   app_settings: () => ({ updated_at: new Date().toISOString() }),
   error_log: () => ({ at: new Date().toISOString(), source: 'server', detail: null }),
+  ability_notes: () => ({ based_on: null, updated_at: new Date().toISOString() }),
 };
-const UNIQUE = { students: ['grade', 'class_no', 'number'], submissions: ['student_id', 'concept'], test_settings: ['concept'], app_settings: ['key'] };
+const UNIQUE = { students: ['grade', 'class_no', 'number'], submissions: ['student_id', 'concept'], test_settings: ['concept'], app_settings: ['key'], ability_notes: ['student_id'] };
 
 class PgErr extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
 
 // errorLog: false면 error_log 표가 없는 DB 흉내. state.fail(method, path) → true면 그 요청을 500으로 (DB 장애 흉내)
 export function createDb({ schema = 2, maxRows = 1000, errorLog = true } = {}) {
-  const db = { students: [], submissions: [], test_settings: [], app_settings: [], submission_history: [], ai_reports: [], ...(errorLog ? { error_log: [] } : {}) };
+  const db = { students: [], submissions: [], test_settings: [], app_settings: [], submission_history: [], ai_reports: [], ability_notes: [], ...(errorLog ? { error_log: [] } : {}) };
   const state = { db, seq: 1, schema, maxRows, log: [], fail: null };
   const cols = (t) => COLS[t].filter((c) => state.schema >= 2 || !(V2_ONLY[t] || []).includes(c));
   const checkCol = (t, c) => { if (!cols(t).includes(c)) throw new PgErr(400, '42703', `column ${t}.${c} does not exist`); };
   const insertRow = (t, row) => {
     for (const k of Object.keys(row)) if (!cols(t).includes(k)) throw new PgErr(400, 'PGRST204', `Could not find the '${k}' column of '${t}' in the schema cache`);
-    const r = { ...(t === 'test_settings' || t === 'app_settings' ? {} : { id: state.seq++ }), ...DEFAULTS[t](), ...row };
+    const r = { ...(t === 'test_settings' || t === 'app_settings' || t === 'ability_notes' ? {} : { id: state.seq++ }), ...DEFAULTS[t](), ...row };
     if (state.schema < 2) for (const c of V2_ONLY[t] || []) delete r[c];
     if (t === 'students' && !(r.class_no >= 1 && r.class_no <= 15)) throw new PgErr(400, '23514', 'new row violates check constraint "students_class_no_check"');
     const u = UNIQUE[t]; if (u && db[t].some((x) => u.every((k) => x[k] === r[k]))) throw new PgErr(409, '23505', `duplicate key value violates unique constraint (${u.join(',')})`);

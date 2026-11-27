@@ -14,6 +14,7 @@ listenDb(mock, 8788, HOST);
 http.createServer(async (req, res) => {
   let b = ''; for await (const c of req) b += c; const j = JSON.parse(b);
   if (process.env.AI_LOG) fs.appendFileSync(process.env.AI_LOG, JSON.stringify({ chars: j.messages.map((m) => m.content.length), max_tokens: j.max_tokens, user: j.messages[1].content }) + '\n');
+  if (/생활기록부/.test(j.messages[0].content)) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content: '"요일 낱말을 듣고 첫 글자를 대문자로 바르게 쓰며, 배운 표현의 뜻을 우리말로 정확히 옮김. 헷갈리는 낱말의 철자를 소리 내어 확인하는 습관을 기르며 꾸준히 성장하는 모습을 보임."' } }] })); return; }
   const items = [...j.messages[1].content.matchAll(/### (\d+)번[\s\S]*?\[학생 답\] (.*)/g)];
   const results = items.map(([, n, a]) => ({ n: +n, ok: /^it'?s /i.test(a), reason: /^it'?s /i.test(a) ? "It's를 덧붙였지만 시각 표현이 맞아요" : '철자가 틀렸어요' }));
   res.writeHead(200, { 'content-type': 'application/json' });

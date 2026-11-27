@@ -942,10 +942,20 @@ function pdCard(id) {
     <div><h4>자주 틀린 것</h4>${s.mistakes.length ? s.mistakes.map((mk) => `<div class="pd-mk"><b>${esc(mk.label)}</b> <span class="muted small">${mk.n}회</span>${mk.ex.length ? `<div class="small">${mk.ex.map((e) => `<span class="chip">${esc(e.set)} ${e.n}번: ${esc(e.ans)} → ${esc(e.key)}</span>`).join(' ')}</div>` : ''}</div>`).join('') : '<p class="muted small">눈에 띄는 실수가 없어요.</p>'}
       <h4>주별 정답률</h4>${trend}</div></div>
     <h4>${ico('sparkle', 15)} AI 설명</h4>
-    ${n ? `${field('한눈에', n.summary)}${field('강점', n.strength)}${field('보완할 점', n.improve)}${field('지도 방법', n.guide)}${field('생활기록부 문구 초안 (교과 세부능력 특기사항)', n.record, true)}<p class="small muted">AI가 ${fmtDate(n.updated_at)}에 쓴 초안이에요. 학생에게는 보이지 않아요. 생활기록부에 쓰기 전에 꼭 고쳐 주세요.</p>`
-      : `<p class="muted small">${d.notesMissing ? 'AI 설명을 저장할 표가 아직 없어요.' : '아직 AI 설명이 없어요. 다음 예약 작업(평일 7:30·15:30)에서 써져요.'}</p>`}
+    ${n && n.summary ? `${field('한눈에', n.summary)}${field('강점', n.strength)}${field('보완할 점', n.improve)}${field('지도 방법', n.guide)}<p class="small muted">AI가 ${fmtDate(n.updated_at)}에 쓴 설명이에요. 학생에게는 보이지 않아요.</p>`
+      : `<p class="muted small">${d.notesMissing ? 'AI 설명을 저장할 표가 아직 없어요.' : '아직 AI 설명이 없어요. 다음 예약 작업(평일 오후 3:30)에서 써져요.'}</p>`}
+    <div class="bar" style="margin:16px 0 4px"><b style="flex:1;font-size:16px">${ico('pen', 15)} 생활기록부 문구 초안 <span class="small muted">(교과 세부능력 및 특기사항)</span></b>
+      <button class="btn sm ${n && n.record ? '' : 'pri'}" id="pdRec" ${s.overall == null || d.notesMissing ? 'disabled' : ''}>${ico(n && n.record ? 'retry' : 'sparkle', 14)} ${n && n.record ? '다시 만들기' : '문구 만들기'}</button></div>
+    ${n && n.record ? `${field('', n.record, true)}<p class="small muted">${fmtDate(n.record_at || n.updated_at)}에 만든 초안이에요. 생활기록부에 쓰기 전에 꼭 고쳐 주세요.</p>`
+      : `<p class="muted small">${s.overall == null ? '확정된 결과가 쌓이면 만들 수 있어요.' : '버튼을 누르면 이 학생의 결과로 AI가 문구를 만들어요 (10초쯤 걸려요). 만든 문구는 저장돼서 다시 누르기 전까지 그대로예요.'}</p>`}
   </div></div>`;
   $('#x').onclick = () => sh.close();
+  if ($('#pdRec')) $('#pdRec').onclick = async () => {
+    const b = $('#pdRec'); if (n && n.record && !confirm('지금 문구를 지우고 새로 만들까요?')) return;
+    b.disabled = true; b.textContent = '만드는 중…';
+    try { const r = await T('/api/t/pandora-record', { id }); d.notes[id] = { ...(d.notes[id] || {}), record: r.record, record_at: r.record_at }; if (m._sh === sh) pdCard(id); toast('생활기록부 문구를 만들었어요', 'ok'); }
+    catch (e) { toast(e.message, 'error'); if (m._sh === sh) { b.disabled = false; b.textContent = '다시 해 보기'; } }
+  };
   m.querySelectorAll('[data-pdcopy]').forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.pdcopy); toast('복사했어요', 'ok'); } catch { toast('복사하지 못했어요', 'error'); } }));
 }
 

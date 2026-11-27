@@ -26,13 +26,13 @@ function describe(q, ans) {
   return `[문제] ${q.q.slice(0, 120)} ${extra}\n[정답] ${answerText(q)}${Array.isArray(q.a) && q.t === 'text' && q.a.length > 1 ? ` (허용: ${q.a.join(', ')})` : ''}\n[대소문자 구별] ${q.cs ? '예' : '아니오'}\n[학생 답] ${show}`;
 }
 
-async function callAI(env, userText, maxTokens = 400) {
+async function callAI(env, userText, maxTokens = 400, system = SYSTEM) {
   const headers = { 'content-type': 'application/json' };
   const h = env.AI_AUTH_HEADER || 'authorization';
   headers[h] = h.toLowerCase() === 'authorization' ? 'Bearer ' + env.AI_API_KEY : env.AI_API_KEY;
   const r = await fetch(env.AI_API_URL, {
     method: 'POST', headers,
-    body: JSON.stringify({ model: env.AI_MODEL, temperature: 0, max_tokens: maxTokens, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: userText }] }),
+    body: JSON.stringify({ model: env.AI_MODEL, temperature: 0, max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: userText }] }),
   });
   const t = await r.text();
   if (!r.ok) throw Object.assign(new Error(`AI API 오류 ${r.status}: ${t.slice(0, 200)}`), { status: 502 });
@@ -62,4 +62,17 @@ export async function aiGrade(env, concept, answers, marks) {
     out[i] = r ? { ok: !!r.ok, reason: String(r.reason || '').slice(0, 120), why } : { ok: false, reason: 'AI가 답하지 않음 — 선생님 확인', why };
   }
   return out;
+}
+
+// 🎁 판도라의 상자: 생활기록부 교과 세부능력 및 특기사항 문구 초안 (교사가 버튼을 누를 때만)
+const RECORD_SYSTEM = `초등학교 3~4학년 영어 교과의 생활기록부 '교과 세부능력 및 특기사항' 초안을 쓰는 보조야.
+- 주어진 학습 자료(영역별 결과, 실제로 쓴 낱말·표현, 자주 한 실수)만 근거로 2~3문장을 써.
+- 문장 끝은 "~함." "~임." "~보임." 같은 생활기록부 문체.
+- 학생 이름, 점수, 숫자, 등급(상·중·하, 우수 등), 다른 학생과의 비교는 절대 쓰지 마.
+- 듣기·읽기·쓰기에서 관찰된 능력을 구체적인 낱말·표현과 함께 쓰고, 부족한 점은 성장 가능성으로 부드럽게 써.
+- 흔한 상투 문장을 피하고 이 학생에게만 맞는 내용으로 써.
+- 다른 말 없이 문구만 출력해.`;
+export async function recordDraft(env, info) {
+  const t = await callAI(env, info, 500, RECORD_SYSTEM);
+  return String(t).replace(/```[a-z]*|```/g, '').replace(/^\s*["'“”]+|["'“”]+\s*$/g, '').replace(/\s+/g, ' ').trim().slice(0, 600);
 }

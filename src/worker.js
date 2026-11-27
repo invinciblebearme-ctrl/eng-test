@@ -1,7 +1,7 @@
 import { CONCEPTS, UNITS, gradeOne, answerText, publicConcepts } from './content.js';
-import { aiGrade } from './ai.js';
+import { aiGrade, recordDraft } from './ai.js';
 import { aiTargets } from './triage.js';
-import { studentAbility, groupSummary } from './ability.js';
+import { studentAbility, groupSummary, DOMAINS } from './ability.js';
 import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS, H2C_JS, IMGS } from './assets.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -391,10 +391,35 @@ export default {
           const classes = [...new Set(students.map((s) => s.class_no))].sort((a, b) => a - b).map((n) => ({ class_no: n, ...groupSummary(list.filter((s) => s.class_no === n)) }));
           let notes = {}, notesMissing = false;
           if (students.length) {
-            try { const nr = (await Promise.all(chunks(students.map((x) => x.id)).map((part) => sbAll(env, `ability_notes?select=student_id,body,updated_at&student_id=in.(${part.join(',')})`)))).flat(); for (const x of nr) notes[x.student_id] = { ...x.body, updated_at: x.updated_at }; }
+            try { const nr = (await Promise.all(chunks(students.map((x) => x.id)).map((part) => sbAll(env, `ability_notes?select=student_id,body,updated_at&student_id=in.(${part.join(',')})&order=student_id.asc`)))).flat(); for (const x of nr) notes[x.student_id] = { ...x.body, updated_at: x.updated_at }; }
             catch (e) { if (e.status === 503 || e.status === 404) notesMissing = true; else throw e; }
           }
           return json({ grade: g, class: c || 0, graded_only: !all, students: list, classes, summary: groupSummary(list), notes, notesMissing });
+        }
+        // 🎁 생활기록부 문구 초안: 선생님이 학생 카드에서 누를 때만 AI(AI_API_URL)로 만들고 ability_notes.body.record에 저장
+        if (p === '/api/t/pandora-record' && req.method === 'POST') {
+          if (!aiOn(env)) return fail('AI 설정(AI_API_URL, AI_API_KEY, AI_MODEL)이 아직 없어요', 503);
+          const st = await getStudent(env, body.id, { teacher: true });
+          const rows = (await sbAll(env, `submissions?select=concept,answers,auto,overrides,status,submitted_at&student_id=eq.${st.id}&status=eq.graded`)).filter((r) => conceptOf(r.concept) && conceptOf(r.concept).grade === st.grade).map((r) => ({ ...r, marks: marksOf(r) }));
+          const ab = studentAbility(st, rows, conceptOf);
+          if (ab.overall == null) return fail('확정된 결과가 아직 적어서 문구를 만들 수 없어요');
+          const word = (s) => (s == null ? '자료 부족' : s >= 85 ? '아주 잘함' : s >= 70 ? '잘함' : s >= 55 ? '보통' : '어려워함');
+          const good = [];   // 맞힌 영어 답 몇 개 (구체적인 낱말·표현)
+          for (const r of rows) { const c = conceptOf(r.concept); c.questions.forEach((q, i) => { const a = r.answers && r.answers[i], v = Array.isArray(a) ? (q.t === 'spellmean' ? a[0] : q.t === 'order' ? a.join(' ') : '') : a; if (r.marks[i] && typeof v === 'string' && /[A-Za-z]{3,}/.test(v) && good.length < 12 && !good.includes(v.trim())) good.push(v.trim()); }); }
+          const sets = Object.entries(ab.sets).filter(([, n]) => n).map(([k, n]) => `${{ concept: '개념 확인 문제', word: '단어 시험', spelltest: '철자 시험', exam: '단원평가' }[k]} ${n}개`).join(', ');
+          const info = [`${st.grade}학년 영어. 푼 시험: ${sets}.`,
+            `영역별: ${DOMAINS.map((d) => `${d.name} ${word(ab.domains[d.k].score)}`).join(' / ')}`,
+            `강점: ${ab.strong.map((x) => x.name).join(', ') || '뚜렷하지 않음'} · 보완: ${ab.weak.map((x) => x.name).join(', ') || '없음'}`,
+            `바르게 쓴 낱말·표현 예: ${good.join(', ') || '없음'}`,
+            `자주 한 실수: ${ab.mistakes.map((m) => `${m.label}${m.ex[0] ? ` (예: ${m.ex[0].ans} → ${m.ex[0].key})` : ''}`).join('; ') || '없음'}`,
+            `주별 변화: ${ab.trend.length > 1 ? (ab.trend[ab.trend.length - 1].rate >= ab.trend[0].rate ? '나아지고 있음' : '최근 조금 낮아짐') : '기록이 짧음'}`].join('\n');
+          let record = await recordDraft(env, info);
+          record = record.split(st.name).join('').replace(/\s+/g, ' ').trim();
+          if (!record) return fail('AI가 문구를 돌려주지 않았어요. 잠시 뒤 다시 해 주세요.', 502);
+          const cur = await sb(env, `ability_notes?select=body,based_on&student_id=eq.${st.id}`);
+          const at = new Date().toISOString(), bodyNew = { ...((cur[0] && cur[0].body) || {}), record, record_at: at };
+          await sb(env, 'ability_notes?on_conflict=student_id', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [{ student_id: st.id, body: bodyNew, based_on: (cur[0] && cur[0].based_on) || null, updated_at: at }] });
+          return json({ ok: true, record, record_at: at });
         }
         if (p === '/api/t/schema') { const v = await schemaV(env, true); return json({ version: v, ok: v >= 2, message: v >= 2 ? '' : UPGRADE_MSG }); }
 
