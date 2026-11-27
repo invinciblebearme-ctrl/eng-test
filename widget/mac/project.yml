@@ -1,0 +1,49 @@
+# 영어 채점 위젯 (맥) — XcodeGen 설정. 만들기: widget/mac/build.sh
+name: EngTestWidget
+options:
+  bundleIdPrefix: kr.allforedu.engtest
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  EngTestWidget:
+    type: application
+    platform: macOS
+    sources: [App, Shared]
+    settings:
+      base:
+        PRODUCT_NAME: EngTestWidget
+        PRODUCT_BUNDLE_IDENTIFIER: kr.allforedu.engtest.widget
+        INFOPLIST_KEY_CFBundleDisplayName: 영어 채점 위젯
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+    dependencies:
+      - target: EngTestWidgetExtension
+        embed: true
+  EngTestWidgetExtension:
+    type: app-extension
+    platform: macOS
+    sources: [Widget, Shared]
+    settings:
+      base:
+        PRODUCT_NAME: EngTestWidgetExtension
+        PRODUCT_BUNDLE_IDENTIFIER: kr.allforedu.engtest.widget.extension
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 영어 채점
+        CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: 영어 채점
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
