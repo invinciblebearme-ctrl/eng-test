@@ -406,8 +406,13 @@ export default {
           const { ab, info: info2, ex } = recordInput(st, rows, conceptOf, bank);
           if (ab.overall == null) return fail('확정된 결과가 아직 적어서 문구를 만들 수 없어요');
           const sents = (s) => s.split(/(?<=[.])\s*/).map((x) => x.trim()).filter(Boolean);
-          let record = await recordDraft(env, info2);
-          if (ex.length && sents(record).some((s) => ex.includes(s))) record = await recordDraft(env, info2 + '\n\n(주의: 방금처럼 예시 문장을 그대로 쓰지 말고 이 학생에 맞게 바꿔 써.)');
+          // 다른 학생 문구·선생님 예시와 한 문장도 겹치면 안 됨 → 겹치면 그 문장을 알려 주고 두 번까지 다시 만듦
+          const others = new Set();
+          for (const x of await sbAll(env, `ability_notes?select=student_id,body&student_id=neq.${st.id}&order=student_id.asc`)) for (const k of ['record', 'summary', 'strength', 'improve', 'guide']) if (x.body && x.body[k]) sents(String(x.body[k])).forEach((s) => others.add(s));
+          ex.forEach((s) => others.add(s));
+          let record = await recordDraft(env, info2), dup = sents(record).filter((s) => others.has(s));
+          for (let k = 0; k < 2 && dup.length; k++) { record = await recordDraft(env, `${info2}\n\n(주의: 다음 문장은 이미 다른 학생 문구나 예시에 있어서 쓸 수 없어. 이 학생에 맞게 새로 써.)\n${dup.map((s) => '- ' + s).join('\n')}`); dup = sents(record).filter((s) => others.has(s)); }
+          if (dup.length) return fail('다른 학생과 겹치지 않는 문구를 만들지 못했어요. 다시 눌러 주세요.', 502);
           record = record.split(st.name).join('').replace(/\s+/g, ' ').trim();
           if (!record) return fail('AI가 문구를 돌려주지 않았어요. 잠시 뒤 다시 해 주세요.', 502);
           const cur = await sb(env, `ability_notes?select=body,based_on&student_id=eq.${st.id}`);
