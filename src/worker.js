@@ -454,8 +454,16 @@ export default {
           try {
             const { data, total } = await sb(env, `error_log?select=id,at,source,method,path,status,message&at=gte.${since}&order=id.desc&limit=50`, { count: true });
             later(ctx, sb(env, `error_log?at=lt.${new Date(Date.now() - 30 * 86400e3).toISOString()}`, { method: 'DELETE', prefer: 'return=minimal' }).catch(() => {}));
-            return json({ items: data, count: total ?? data.length, hours, telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
+            let seen = 0; try { const r = await sb(env, 'app_settings?select=value&key=eq.err_seen'); seen = r[0] ? +r[0].value || 0 : 0; } catch { seen = 0; }
+            return json({ items: data, count: total ?? data.length, hours, seen, telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
           } catch (e) { if (e.status === 503) return json({ items: [], count: 0, hours, missing: true }); throw e; }
+        }
+        // '확인함'을 서버에 기억 — 한 기기에서 누르면 휴대폰·다른 컴퓨터에서도 같은 오류 알림이 다시 안 뜸
+        if (p === '/api/t/errors-seen' && req.method === 'POST') {
+          const id = int(body.id);
+          if (!(id > 0)) return fail('id가 필요해요', 400);
+          await sb(env, 'app_settings?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: [{ key: 'err_seen', value: String(id), updated_at: new Date().toISOString() }] });
+          return json({ ok: true, seen: id });
         }
         // 🎁 판도라의 상자: 학생 실력 (영역별 점수·단계·성취 수준). class 없으면 학년 전체. 기본은 확정된 결과만
         if (p === '/api/t/pandora') {

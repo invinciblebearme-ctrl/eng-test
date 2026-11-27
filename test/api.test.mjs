@@ -213,6 +213,13 @@ ok(mock.state.db.error_log.length === 1, '400번대(잘못된 요청)는 기록 
 r = await call('/api/t/errors?hours=24', null, tk);
 ok(r.status === 200 && r.d.count === 1 && r.d.items[0].path === '/api/me' && r.d.telegram === false, '/api/t/errors: 최근 오류 목록', r.d);
 ok((await call('/api/t/errors', null, null)).status === 401, '/api/t/errors는 교사만');
+ok(r.d.seen === 0, "'확인함' 전에는 seen 0");
+const eid = r.d.items[0].id;
+r = await call('/api/t/errors-seen', { id: eid }, tk);
+ok(r.status === 200 && r.d.seen === eid, "'확인함'을 서버에 저장", r.d);
+r = await call('/api/t/errors?hours=24', null, tk);
+ok(r.d.seen === eid, "다른 기기에서 열어도 '확인함'이 기억됨 (seen)", r.d);
+ok((await call('/api/t/errors-seen', { id: eid }, null)).status === 401, 'errors-seen은 교사만');
 // 화면 오류
 r = await call('/api/client-error', { message: 'x is not defined', where: '/teacher?token=abc#k teacher:12' }, null);
 ok(r.d.ok === false && mock.state.db.error_log.length === 1, '로그인 안 한 화면 오류는 무시');

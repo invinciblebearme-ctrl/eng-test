@@ -137,7 +137,7 @@ async function boot() {
 }
 // ---------------- ⚠️ 서버·화면 오류 알림 (최근 24시간, '확인함' 이후 새로 생긴 것만) ----------------
 const ERR_SEEN_KEY = 'eng4-err-seen';
-const errSeen = () => { try { return +(localStorage.getItem(ERR_SEEN_KEY) || 0); } catch { return 0; } };
+const errSeen = () => { let v = 0; try { v = +(localStorage.getItem(ERR_SEEN_KEY) || 0); } catch {} return Math.max(v, +(ERRS && ERRS.seen) || 0); };
 let ERRS = null;
 async function checkErrors() {
   try { ERRS = await T('/api/t/errors?hours=24'); } catch { return; }
@@ -148,7 +148,7 @@ async function checkErrors() {
   const last = fresh[0], src = { server: '서버', teacher: '교사 화면', student: '학생 화면' };
   el.innerHTML = `<div class="notice" role="alert">${ico('warn', 15)} 최근 24시간에 새 오류 <b>${fresh.length}${fresh.length >= 50 ? '+' : ''}건</b> — 마지막: ${new Date(last.at).toLocaleString('ko-KR')} · ${src[last.source] || last.source} · ${esc(last.path || '')} ${esc((last.message || '').slice(0, 80))}
     <button class="btn sm" id="errMore">자세히</button> <button class="btn sm ghost" id="errOk">확인함</button></div>`;
-  $('#errOk').onclick = () => { try { localStorage.setItem(ERR_SEEN_KEY, String(ERRS.items[0].id)); } catch {} el.innerHTML = ''; };
+  $('#errOk').onclick = () => { const id = ERRS.items[0].id; try { localStorage.setItem(ERR_SEEN_KEY, String(id)); } catch {} ERRS.seen = id; el.innerHTML = ''; T('/api/t/errors-seen', { id }).catch(() => {}); };
   $('#errMore').onclick = () => openErrors();
 }
 function openErrors() {
