@@ -472,17 +472,25 @@ const parseTime = (s) => {
   return h >= 1 && h <= 12 && mi < 60 ? `${h}:${String(mi).padStart(2, '0')}` : null;
 };
 
+// 우리말 뜻: 띄어쓰기·쉼표 등을 빼고 비교. 맞는 뜻을 쉼표·/로 여러 개 쓴 답(3, 셋)은 조각이 모두 인정 답이면 정답
+// (하나라도 틀린 뜻이 섞이면 오답 — 예: 40, 마흔 → fourteen 오답)
+function koOk(list, ans, strip) {
+  const k = (v) => norm(v).replace(strip, '');
+  if (list.some((x) => k(x) === k(ans))) return true;
+  const parts = String(ans ?? '').split(/[,/]/).map(k).filter(Boolean);
+  return parts.length > 1 && parts.every((p) => list.some((x) => k(x) === p));
+}
+
 export function gradeOne(q, ans) {
   if (q.a == null) return false;   // 정답 미입력
   if (ans == null || ans === '' || (Array.isArray(ans) && ans.every((x) => !x))) return false;
   switch (q.t) {
     case 'text':
-      if (q.ko) { const k = (v) => norm(v).replace(/[\s,.~]/g, ''); return asList(q.a).some((x) => k(x) === k(ans)); }
+      if (q.ko) return koOk(asList(q.a), ans, /[\s,.~]/g);
       return asList(q.a).some((x) => matchEn(x, ans, q.cs));
     case 'spellmean': {
       if (!Array.isArray(ans)) return false;
-      const k = (v) => norm(v).replace(/[\s,.~?!/]/g, '');
-      return q.a.en.some((x) => matchEn(x, ans[0], q.cs)) && q.a.ko.some((x) => k(x) === k(ans[1]));
+      return q.a.en.some((x) => matchEn(x, ans[0], q.cs)) && koOk(q.a.ko, ans[1], /[\s,.~?!/]/g);
     }
     case 'spell':
       return Array.isArray(ans) && q.a.every((x, i) => String(ans[i] ?? '').trim().toLowerCase() === x);

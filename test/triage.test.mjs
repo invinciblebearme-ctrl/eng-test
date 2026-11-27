@@ -33,6 +33,9 @@ const cases = [
   [4, 1, 'sevn', true],                   // 짧은 낱말 1자
   [4, 1, 'six', false],                   // 다른 숫자
   [22, 3, '해님', true],                  // 한 글자 뜻 + 덧붙임
+  [19, 4, '보다,손목시계', true],          // 뜻 여러 개 중 하나가 목록에 없음 → AI 판단
+  [19, 5, '캡모자', true],                // 덧붙임 → AI 판단
+  [17, 5, '노래, 음악', true],            // 뜻 여러 개 중 하나가 애매 → AI 판단
 ];
 let bad = 0;
 for (const [cid, n, a, want] of cases) {
