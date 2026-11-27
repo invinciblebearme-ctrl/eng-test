@@ -116,7 +116,9 @@ async function openWidgetModal() {
       const r = await T('/api/t/widget-keys', { label: box.querySelector('#wgLabel').value });
       draw(r.keys); statusMsg(st, '', '');
       box.querySelector('#wgNew').innerHTML = `<div class="notice" style="margin-top:10px"><b>${esc(r.label)}</b> 연결 코드 — 지금 한 번만 보여요. 위젯 설정에 붙여 넣어 주세요.
-        <div class="bar" style="gap:6px;margin-top:6px"><input class="field" id="wgCode" readonly value="${esc(r.key)}" style="flex:1;min-width:0;font-family:ui-monospace,monospace;font-size:13px"><button class="btn sm" id="wgCopy">${ico('copy', 15)} 복사</button></div></div>`;
+        <div class="bar" style="gap:6px;margin-top:6px"><input class="field" id="wgCode" readonly value="${esc(r.key)}" style="flex:1;min-width:0;font-family:ui-monospace,monospace;font-size:13px"><button class="btn sm" id="wgCopy">${ico('copy', 15)} 복사</button></div>
+        <div class="bar" style="gap:12px;margin-top:10px;align-items:center"><div style="width:120px;height:120px;background:#fff;border-radius:8px;flex:none">${qrSVG(location.origin + '/w#k=' + r.key, 4)}</div>
+        <span class="small"><b>휴대폰이면</b> 카메라로 이 QR을 찍어 열고, 그 화면에서 <b>홈 화면에 추가</b>하세요. 코드가 아이콘에 함께 담겨 다시 넣지 않아도 돼요.</span></div></div>`;
       box.querySelector('#wgCopy').onclick = async () => toast((await copyText(r.key)) ? '복사했어요' : '복사하지 못했어요. 칸을 눌러 직접 복사해 주세요.', 'ok');
       box.querySelector('#wgCode').onfocus = (e) => e.target.select();
     } catch (e) { statusMsg(st, e.message, 'error'); }
