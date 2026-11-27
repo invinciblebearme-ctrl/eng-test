@@ -1,6 +1,6 @@
 // 판도라의 상자 계산 규칙 확인
 import { CONCEPTS, gradeOne } from '../src/content.js';
-import { scoreItem, studentAbility, groupSummary, levelOf, gradeOf } from '../src/ability.js';
+import { scoreItem, studentAbility, groupSummary, levelOf, gradeOf, recordInput } from '../src/ability.js';
 const C = (id) => CONCEPTS.find((c) => c.id === id);
 let bad = 0;
 const eq = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) bad++; console.log(ok ? 'ok ' : 'BAD', name, ok ? '' : `→ ${JSON.stringify(got)} (want ${JSON.stringify(want)})`); };
@@ -29,5 +29,10 @@ const empty = studentAbility({ id: 2, class_no: 1, number: 2, name: '가짜2' },
 eq('기록 없음 → 자료 부족', [empty.overall, empty.level], [null, null]);
 const g = groupSummary([full, empty]);
 eq('요약: 측정 1명', [g.students, g.measured, g.levels['우수']], [2, 1, 1]);
+// 평어 예시: 단원이 맞으면 units, 없으면 any(문체 참고)에서
+const g3 = CONCEPTS.find((c) => c.grade === 3), r3 = [{ concept: g3.id, answers: [], marks: g3.questions.map(() => true), status: 'graded' }];
+const st3 = { id: 3, grade: 3, class_no: 1, number: 3, name: '가짜3' };
+eq('예시 any 사용', recordInput(st3, r3, C, { any: ['예시 문장 하나임.'] }).ex, ['예시 문장 하나임.']);
+eq('단원 예시 우선', recordInput(st3, r3, C, { units: { [parseInt(g3.unit, 10)]: { good: ['단원 예시임.'], basic: ['단원 예시임.'] } }, any: ['다른 것임.'] }).ex, ['단원 예시임.']);
 console.log(bad ? `${bad} wrong` : 'ALL OK');
 process.exit(bad ? 1 : 0);

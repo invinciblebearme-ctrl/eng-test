@@ -154,7 +154,7 @@ export function groupSummary(list) {
 }
 
 // 생활기록부 문구 초안을 위한 AI 입력 (교사 버튼 /api/t/pandora-record 가 씀)
-// bank: app_settings record_examples_<학년> = {units: {"7": {basic: [...], good: [...]}}} — 학생이 푼 단원·수준에 맞는 예시를 섞어서 최대 9개
+// bank: app_settings record_examples_<학년> = {units: {"7": {basic: [...], good: [...]}}} 또는 {any: [...]} (단원 무관 문체 참고) — 학생이 푼 단원·수준에 맞는 예시를 섞어서 최대 9개
 export function recordInput(st, rows, conceptOf, bank, rand = Math.random) {
   const ab = studentAbility(st, rows, conceptOf);
   const word = (s) => (s == null ? '자료 부족' : s >= 85 ? '아주 잘함' : s >= 70 ? '잘함' : s >= 55 ? '보통' : '어려워함');
@@ -166,6 +166,8 @@ export function recordInput(st, rows, conceptOf, bank, rand = Math.random) {
   const units = Object.keys(byUnit).sort((a, b) => a - b);
   let ex = [];
   if (bank && bank.units) { const lv = ab.overall >= 75 ? 'good' : 'basic'; for (const u of units) { const list = (bank.units[u] && bank.units[u][lv]) || []; ex.push(...[...list].sort(() => rand() - 0.5).slice(0, 3)); } }
+  // 단원이 맞는 예시가 없으면(예: 다른 학기 평어) 문체 참고용 any 목록에서 고름
+  if (!ex.length && bank && Array.isArray(bank.any)) ex = [...bank.any].sort(() => rand() - 0.5).slice(0, 6);
   ex = ex.slice(0, 9);
   const info = [`${st.grade}학년 영어. 푼 시험: ${sets}.`,
     `영역별: ${DOMAINS.map((d) => `${d.name} ${word(ab.domains[d.k].score)}`).join(' / ')}`,
