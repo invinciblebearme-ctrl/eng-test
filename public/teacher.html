@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>교사용 · 2학기 영어 채점</title>
+<link rel="manifest" href="/teacher.webmanifest">
+<meta name="theme-color" content="#f4efe7">
+<link rel="icon" type="image/png" sizes="192x192" href="/img/app-192.png">
+<link rel="apple-touch-icon" href="/img/app-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="영어 교사">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="/style.css">
 <script src="/xlsx.js" defer></script>
@@ -43,6 +51,9 @@ function applyTeacherTheme(id) {
   const t = THEME_META.some((x) => x.id === id) ? id : 'default';
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem(TEACHER_THEME_KEY, t); } catch {}
+  // 앱(PWA) 맨 위 막대 색도 테마 바탕색에 맞춤
+  const tc = document.querySelector('meta[name="theme-color"]'), bg = document.body && getComputedStyle(document.body).getPropertyValue('--bg').trim();
+  if (tc && bg) tc.content = bg;
   return t;
 }
 applyTeacherTheme(localStorage.getItem(TEACHER_THEME_KEY) || 'default');

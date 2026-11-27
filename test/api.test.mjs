@@ -264,6 +264,12 @@ delete env.TELEGRAM_BOT_TOKEN; delete env.TELEGRAM_CHAT_ID; mock.state.fail = nu
   ok((await W(mk.d.key, 'OPTIONS')).status === 204, '위젯: OPTIONS 204');
   const wp = await worker.fetch(new Request('http://w.local/w'), env), wh = await wp.text();
   ok(wp.status === 200 && wh.includes('/api/w/summary') && wh.includes('영어 채점'), '위젯 화면 /w');
+  // 교사 화면 앱 설치(PWA)
+  const mf = await call('/teacher.webmanifest');
+  ok(mf.status === 200 && mf.d.start_url === '/teacher' && mf.d.display === 'standalone' && mf.d.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'), 'PWA manifest: 교사 화면, 앱 창, 512 아이콘', mf.d);
+  const th = await (await worker.fetch(new Request('http://w.local/teacher'), env)).text();
+  ok(th.includes('rel="manifest" href="/teacher.webmanifest"') && th.includes('apple-touch-icon'), '교사 화면에 manifest·아이폰 아이콘 연결');
+  for (const n of ['app-180.png', 'app-192.png', 'app-512.png']) { const ir = await worker.fetch(new Request('http://w.local/img/' + n), env); ok(ir.status === 200 && ir.headers.get('content-type') === 'image/png', '앱 아이콘 ' + n); }
   const mk2 = await call('/api/t/widget-keys', { label: '윈도우' }, tw);
   ok((await call('/api/t/widget-keys', null, tw)).d.keys.length === 2, '연결 2개');
   await call('/api/t/widget-key-delete', { id: mk.d.id }, tw);

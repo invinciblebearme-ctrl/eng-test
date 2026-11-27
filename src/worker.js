@@ -286,7 +286,13 @@ export default {
         if (p === '/' || p === '/index.html' || /^\/t\/\d+\/?$/.test(p)) return text(STUDENT_HTML, 'text/html');   // /t/25 = 그 시험 바로 열기
         if (p === '/qr.js') return new Response(QR_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=604800' } });
         if (p === '/teacher' || p === '/teacher/') return text(TEACHER_HTML, 'text/html');
-        if (p === '/w' || p === '/w/') return text(WIDGET_HTML, 'text/html');   // 🖥️ 위젯 화면 (휴대폰 홈 화면·Tauri 앱과 같은 화면)
+        if (p === '/w' || p === '/w/') return text(WIDGET_HTML, 'text/html');
+        // 📱 교사 화면 앱 설치(PWA): 휴대폰 '홈 화면에 추가', 맥 Safari 'Dock에 추가'·Chrome '앱 설치'
+        if (p === '/teacher.webmanifest') return new Response(JSON.stringify({
+          id: '/teacher', name: '영어 채점 · 교사', short_name: '영어 교사', lang: 'ko', start_url: '/teacher', scope: '/teacher', display: 'standalone',
+          background_color: '#f4efe7', theme_color: '#f4efe7', description: '3·4학년 영어 채점·검토·공개',
+          icons: [{ src: '/img/app-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/img/app-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/img/app-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
+        }), { headers: { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'public, max-age=3600' } });   // 🖥️ 위젯 화면 (휴대폰 홈 화면·Tauri 앱과 같은 화면)
         if (p === '/style.css') return text(STYLE_CSS, 'text/css');
         if (p === '/common.js') return text(COMMON_JS, 'text/javascript');
         if (p.startsWith('/img/')) {
