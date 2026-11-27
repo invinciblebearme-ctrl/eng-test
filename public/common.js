@@ -306,8 +306,9 @@ function resultHeadHTML(c, sub, st) {
     <div class="rscore">${sub.score} <small>/ ${c.questions.length}</small></div></div>`;
 }
 // correct: 문항별 정답 글자 배열
-function resultItemsHTML(c, sub, correct) {
+function resultItemsHTML(c, sub, correct, onlyWrong) {
   return c.questions.map((q, i) => {
+    if (onlyWrong && sub.marks[i]) return '';
     const ok = sub.marks[i], mine = answerToText(q, sub.answers[i]);
     return `<div class="q ${ok ? 'ok' : 'no'}"><div class="qh"><div class="qn">${i + 1}</div><div class="qt">${optLabel(q.q)}${q.pat ? ` <b>${esc(q.pat)}</b> (${esc(q.mean)})` : ''}</div><div class="mark ${ok ? 'ok' : 'no'}">${ok ? 'O' : 'X'}</div></div>${mediaHTML(q)}
       <div class="fb">내 답: <b>${optLabel(mine) || '<span class="muted">(빈칸)</span>'}</b>${optPic(q, sub.answers[i])}${ok ? '' : ` &nbsp;→&nbsp; 정답: <span class="right">${optLabel(correct[i])}</span>${optPic(q, q.a ?? correct[i])}`}</div></div>`;
@@ -316,18 +317,22 @@ function resultItemsHTML(c, sub, correct) {
 // 선생님 말씀 카드 (결과 화면·출력 공통)
 const teacherNoteHTML = (fb) => (fb ? `<div class="tnote"><div class="tnh"><img class="illus illus-teacher" src="/img/teacher-avatar.jpg" alt=""> 선생님이 남긴 말</div><p>${esc(fb).replace(/\n/g, '<br>')}</p></div>` : '');
 // 한 학생의 결과 모음 (parts: [{c, sub, correct}])
+// detail: true = 문제별 자세히, 'wrong' = 틀린 문제·선생님 말씀만, false = 점수표만
 function studentReportHTML(st, parts, detail, gradeLabel) {
+  const onlyWrong = detail === 'wrong';
   const total = parts.reduce((a, p) => a + p.sub.score, 0), max = parts.reduce((a, p) => a + p.c.questions.length, 0);
   return `<div class="rhead"><div class="rtitle">${gradeLabel} · 결과 모음</div>
       <div class="rmeta">${who(st)} · ${fmtDate(new Date())} 출력</div>
       <div class="rscore">${max ? Math.round(total / max * 100) : 0}<small>%</small></div></div>
     <table class="plain rsum"><tr><th>시험</th><th>점수</th><th>채점일</th></tr>${parts.map(({ c, sub, hist }) => `<tr><td>${esc(setTitle(c))}</td><td>${(hist || []).map((h) => `<span class="muted">${h.attempt}차 ${h.score} → </span>`).join('')}<b>${sub.score}</b> / ${c.questions.length}${sub.attempt > 1 ? ` <span class="small">(${sub.attempt}차)</span>` : ''}</td><td>${fmtDate(sub.graded_at) || '<span class="muted">채점 대기</span>'}</td></tr>`).join('')}</table>
-    ${detail ? parts.map(({ c, sub, correct }) => `<section class="rsec">${resultHeadHTML(c, sub, st)}${teacherNoteHTML(sub.feedback)}${resultItemsHTML(c, sub, correct)}</section>`).join('') : ''}`;
+    ${detail ? parts.map(({ c, sub, correct }) => `<section class="rsec">${resultHeadHTML(c, sub, st)}${teacherNoteHTML(sub.feedback)}${onlyWrong && sub.marks.every(Boolean) ? '<p class="small muted">틀린 문제가 없어요. 모두 맞혔어요!</p>' : resultItemsHTML(c, sub, correct, onlyWrong)}</section>`).join('') : ''}`;
 }
 // el 부분만 인쇄 (그림을 다 불러온 뒤)
+// 몸통 바로 아래 요소(교사 일괄 출력 등)는 다른 것을 숨기고 제자리에 두어야 학생마다 쪽 나눔이 됨 (absolute 안에서는 쪽 나눔이 무시됨)
 function printOnly(el) {
-  document.body.classList.add('printing'); el.classList.add('print-target');
-  const done = () => { document.body.classList.remove('printing'); el.classList.remove('print-target'); window.removeEventListener('afterprint', done); };
+  const solo = el.parentElement === document.body;
+  document.body.classList.add('printing'); if (solo) document.body.classList.add('printing-solo'); el.classList.add('print-target');
+  const done = () => { document.body.classList.remove('printing', 'printing-solo'); el.classList.remove('print-target'); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
   Promise.all([...el.querySelectorAll('img')].map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; })))).then(() => setTimeout(() => window.print(), 150));
 }

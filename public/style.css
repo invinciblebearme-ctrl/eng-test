@@ -208,6 +208,10 @@ ol.keylist{padding-left:24px}ol.keylist li{margin:8px 0;padding-bottom:8px;borde
   .print-target .spage{break-after:page}
   .print-target .spage:last-child{break-after:auto}
   .print-target .spage .rsec{break-before:auto;margin-top:18px}
+  body.printing-solo > :not(.print-target){display:none!important}
+  body.printing-solo .print-target{position:static!important}
+  .print-target .spage{break-before:page;page-break-before:always}
+  .print-target .spage:first-child{break-before:auto;page-break-before:auto}
 }
 
 /* 링크·QR */

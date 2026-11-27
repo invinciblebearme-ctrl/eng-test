@@ -892,7 +892,7 @@ async function openPrintPanel(visibleIds) {
   const groups = []; for (const c of sets) { const g = c.kind === 'concept' ? ico('book', 15) + ' 기본 개념' : `${ico('note', 15)} ${c.unit}`; const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(c); else groups.push([g, [c]]); }
   const kindName = { concept: '', word: ico('word', 13) + ' 단어 시험', spelltest: ico('pen', 13) + ' 철자 시험', exam: ico('note', 13) + ' 단원평가' };
   const draw = () => {
-    const onlyGraded = $('#pgOnly') ? $('#pgOnly').checked : true, detail = $('#pgDetail') ? $('#pgDetail').checked : true;
+    const onlyGraded = $('#pgOnly') ? $('#pgOnly').checked : true, mode = (m.querySelector('[name=pgMode]:checked') || {}).value || 'all';
     m.innerHTML = `<div class="modal"><div class="box">
       <div class="bar" style="margin-top:0"><b style="font-size:20px;flex:1">${ico('print', 18)} ${GRADE}학년 ${CLS}반 결과 출력</b><button class="btn sm" id="x">닫기</button></div>
       <div class="pp">
@@ -902,7 +902,10 @@ async function openPrintPanel(visibleIds) {
           <div class="pplist">${groups.map(([g, cs]) => `<div class="sg">${g}</div>${cs.map((c) => { const n = cntOf(c.id); return `<label class="${n ? '' : 'muted'}"><input type="checkbox" data-set="${c.id}" ${selSet.has(c.id) ? 'checked' : ''} ${n ? '' : 'disabled'}> ${c.kind === 'concept' ? `${c.id}. ${esc(c.title)}` : kindName[c.kind]} <span class="small muted">(${n}명 제출)</span></label>`; }).join('')}`).join('')}</div></div>
       </div>
       <div class="bar"><label><input type="checkbox" id="pgOnly" ${onlyGraded ? 'checked' : ''}> 채점 확정된 결과만</label>
-        <label><input type="checkbox" id="pgDetail" ${detail ? 'checked' : ''}> 문제별 자세히 (끄면 점수표만)</label></div>
+        <span class="small muted" style="margin-left:8px">내용:</span>
+        <label><input type="radio" name="pgMode" value="all" ${mode === 'all' ? 'checked' : ''}> 문제별 자세히</label>
+        <label><input type="radio" name="pgMode" value="wrong" ${mode === 'wrong' ? 'checked' : ''}> 틀린 문제·선생님 말씀만</label>
+        <label><input type="radio" name="pgMode" value="score" ${mode === 'score' ? 'checked' : ''}> 점수표만</label></div>
       <div class="bar"><span id="pgInfo" class="small muted"></span><span style="flex:1"></span><button class="btn pri" id="pgGo">${ico('print', 14)} 출력하기</button></div>
     </div></div>`;
     const info = () => {
@@ -916,10 +919,10 @@ async function openPrintPanel(visibleIds) {
     $('#stNone').onclick = () => { selSt.clear(); draw(); };
     $('#ssAll').onclick = () => { sets.forEach((c) => cntOf(c.id) && selSet.add(c.id)); draw(); };
     $('#ssNone').onclick = () => { selSet.clear(); draw(); };
-    $('#pgOnly').onchange = info; $('#pgDetail').onchange = info;
+    $('#pgOnly').onchange = info;
     $('#x').onclick = () => sh.close();
     $('#pgGo').onclick = () => {
-      const og = $('#pgOnly').checked, det = $('#pgDetail').checked;
+      const og = $('#pgOnly').checked, md = (m.querySelector('[name=pgMode]:checked') || {}).value || 'all', det = md === 'all' ? true : md === 'wrong' ? 'wrong' : false;
       const chosen = sets.filter((c) => selSet.has(c.id));
       const pages = d.students.filter((st) => selSt.has(st.id)).map((st) => {
         const parts = chosen.map((c) => { const x = has[st.id + ':' + c.id]; return x && (!og || x.status === 'graded') ? { c, sub: x, correct: c.questions.map((q) => q.answerText), hist: hby[st.id + ':' + c.id] || [] } : null; }).filter(Boolean);
