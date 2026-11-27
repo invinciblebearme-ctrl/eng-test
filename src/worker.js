@@ -1,6 +1,7 @@
 import { CONCEPTS, UNITS, gradeOne, answerText, publicConcepts } from './content.js';
 import { aiGrade } from './ai.js';
 import { aiTargets } from './triage.js';
+import { studentAbility, groupSummary } from './ability.js';
 import { STUDENT_HTML, TEACHER_HTML, STYLE_CSS, COMMON_JS, XLSX_JS, QR_JS, H2C_JS, IMGS } from './assets.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -379,6 +380,21 @@ export default {
             later(ctx, sb(env, `error_log?at=lt.${new Date(Date.now() - 30 * 86400e3).toISOString()}`, { method: 'DELETE', prefer: 'return=minimal' }).catch(() => {}));
             return json({ items: data, count: total ?? data.length, hours, telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
           } catch (e) { if (e.status === 503) return json({ items: [], count: 0, hours, missing: true }); throw e; }
+        }
+        // 🎁 판도라의 상자: 학생 실력 (영역별 점수·단계·성취 수준). class 없으면 학년 전체. 기본은 확정된 결과만
+        if (p === '/api/t/pandora') {
+          const g = int(q.get('grade')) || 4, c = int(q.get('class')), all = q.get('all') === '1', v = await schemaV(env);
+          const students = await sbAll(env, `students?select=id,class_no,number,name&grade=eq.${g}${c ? `&class_no=eq.${c}` : ''}${activeQ(v)}&order=class_no.asc,number.asc`);
+          const rows = students.length ? (await Promise.all(chunks(students.map((x) => x.id)).map((part) => sbAll(env, `submissions?select=student_id,concept,answers,auto,overrides,status,submitted_at&student_id=in.(${part.join(',')})${all ? '' : '&status=eq.graded'}`)))).flat() : [];
+          const by = {}; for (const r of rows) { const cc = conceptOf(r.concept); if (cc && cc.grade === g) (by[r.student_id] = by[r.student_id] || []).push({ ...r, marks: marksOf(r) }); }
+          const list = students.map((st) => studentAbility(st, by[st.id] || [], conceptOf));
+          const classes = [...new Set(students.map((s) => s.class_no))].sort((a, b) => a - b).map((n) => ({ class_no: n, ...groupSummary(list.filter((s) => s.class_no === n)) }));
+          let notes = {}, notesMissing = false;
+          if (students.length) {
+            try { const nr = (await Promise.all(chunks(students.map((x) => x.id)).map((part) => sbAll(env, `ability_notes?select=student_id,body,updated_at&student_id=in.(${part.join(',')})`)))).flat(); for (const x of nr) notes[x.student_id] = { ...x.body, updated_at: x.updated_at }; }
+            catch (e) { if (e.status === 503 || e.status === 404) notesMissing = true; else throw e; }
+          }
+          return json({ grade: g, class: c || 0, graded_only: !all, students: list, classes, summary: groupSummary(list), notes, notesMissing });
         }
         if (p === '/api/t/schema') { const v = await schemaV(env, true); return json({ version: v, ok: v >= 2, message: v >= 2 ? '' : UPGRADE_MSG }); }
 

@@ -554,3 +554,19 @@ html[data-theme="dark"] body.role-teacher .rvrow.rowf{background:#172554}
   .rpt-tbl:not(.rpt-low) td.w,.rpt-tbl:not(.rpt-low) th.w{min-width:0}
   .rpt-tbl:not(.rpt-low) .rpt-bar{width:56px}
 }
+
+/* 판도라의 상자 */
+.pd-sum{margin:12px 0}
+.pd-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.pd-grid{grid-template-columns:1fr}}
+.pd-grid h4{margin:12px 0 6px}
+.pd-tbl td,.pd-tbl th{white-space:nowrap}
+.pd-tbl .rpt-bar{width:60px}
+.badge.pd-lv.wait{background:var(--waitbg,#fff3cd);color:var(--wait)}.badge.pd-lv.no{background:var(--nobg,#fde2e2);color:var(--no)}
+.pd-gr{font-weight:800}.pd-gr.ok{color:var(--ok)}.pd-gr.wait{color:var(--wait)}.pd-gr.no{color:var(--no)}
+.pd-mk{margin:6px 0}.pd-mk .chip{display:inline-block;margin:2px 4px 2px 0;font-size:13px;font-weight:600;padding:2px 8px;border-width:1px;box-shadow:none;background:var(--card);color:var(--ink);border-color:var(--line)}
+.pd-trend{display:flex;gap:8px;align-items:flex-end;height:120px;padding:6px 0}
+.pd-trend>div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:12px}
+.pd-trend i{display:block;width:70%;max-width:34px;border-radius:6px 6px 0 0;background:var(--ok)}.pd-trend i.wait{background:var(--wait)}.pd-trend i.no{background:var(--no)}
+.pd-trend span{color:var(--muted)}
+.pd-note{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:8px 0}.pd-note p{margin:0;line-height:1.6}
