@@ -10,6 +10,7 @@
 // API 형식이 OpenAI 호환이 아니면 callAI()의 요청 본문과 응답 읽는 부분만 바꾸면 됩니다.
 import { answerText } from './content.js';
 import { aiTargets } from './triage.js';
+import { RECORD_RULES } from './record-rules.js';
 
 // 지시문은 짧게 (매 요청마다 보내므로 토큰 절약)
 const SYSTEM = `초등 영어 시험 채점 보조. 각 문항의 학생 답이 자동 채점에서 오답이 됐지만 정답과 아주 가까워 애매한 경우다. 인정 여부만 판단해.
@@ -65,15 +66,7 @@ export async function aiGrade(env, concept, answers, marks) {
 }
 
 // 🎁 판도라의 상자: 생활기록부 교과 세부능력 및 특기사항 문구 초안 (교사가 버튼을 누를 때만)
-const RECORD_SYSTEM = `초등학교 3~4학년 영어 교과의 생활기록부 '교과 세부능력 및 특기사항' 초안을 쓰는 보조야.
-- 주어진 학습 자료(영역별 결과, 실제로 쓴 낱말·표현, 자주 한 실수)만 근거로 2~3문장을 써.
-- 문장 끝은 "~함." "~임." "~보임." 같은 생활기록부 문체.
-- 학생 이름, 점수, 숫자, 등급(상·중·하, 우수 등), 다른 학생과의 비교는 절대 쓰지 마.
-- 듣기·읽기·쓰기에서 관찰된 능력을 구체적인 낱말·표현과 함께 쓰고, 부족한 점은 성장 가능성으로 부드럽게 써.
-- 흔한 상투 문장을 피하고 이 학생에게만 맞는 내용으로 써.
-- 예시에 나오는 수업 활동(역할극, 찬트, 게임, 발표 등)은 이 자료로 확인할 수 없으니 지어내지 말고, 자료에 있는 듣기·읽기·쓰기 결과와 낱말·표현만 근거로 써.
-- [참고 예시]가 있으면 그 선생님의 문체·길이·구성(활동 → 능력 → 태도)을 따라 하되, 예시 문장을 그대로 옮기지 말고 이 학생의 자료에 맞게 새 문장으로 써.
-- 다른 말 없이 문구만 출력해.`;
+const RECORD_SYSTEM = RECORD_RULES;
 export async function recordDraft(env, info) {
   const t = await callAI(env, info, 600, RECORD_SYSTEM);
   return String(t).replace(/```[a-z]*|```/g, '').replace(/^\s*["'“”]+|["'“”]+\s*$/g, '').replace(/\s+/g, ' ').trim().slice(0, 600);
