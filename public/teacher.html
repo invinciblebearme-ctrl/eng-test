@@ -929,7 +929,7 @@ async function pandoraView() {
 }
 function pdCard(id) {
   const d = PD.data, s = d && d.students.find((x) => x.id === id); if (!s) return;
-  const n = d.notes[id], sh = shell(`${s.name} 영어 실력 카드`, true), m = sh.m;
+  const n = d.notes[id], sh = shell(`${s.name} 영어 실력 카드`), m = sh.m;
   const maxW = Math.max(1, ...s.trend.map((t) => t.n));
   const trend = s.trend.length ? `<div class="pd-trend">${s.trend.map((t) => `<div title="${t.w} 주 · ${t.n}문항 · ${t.rate}%"><i class="${pdTone(t.rate)}" style="height:${Math.max(4, t.rate)}%;opacity:${0.5 + 0.5 * t.n / maxW}"></i><span>${t.w.slice(5).replace('-', '/')}</span><b>${t.rate}</b></div>`).join('')}</div>` : '<p class="muted small">기록이 없어요.</p>';
   const field = (label, v, copy) => (v ? `<div class="pd-note"><div class="bar" style="margin:0 0 4px"><b style="flex:1">${label}</b>${copy ? `<button class="btn sm" data-pdcopy="${esc(v)}">${ico('copy', 13)} 복사</button>` : ''}</div><p>${esc(v)}</p></div>` : '');
