@@ -24,8 +24,12 @@ android {
             }
         }
     }
+    buildFeatures { buildConfig true }
     buildTypes {
+        // 디버그 APK는 에뮬레이터에서 맥의 가짜 서버(node test/serve.mjs, 10.0.2.2:8787)로 시험
+        debug { buildConfigField 'String', 'SITE', '"http://10.0.2.2:8787"' }
         release {
+            buildConfigField 'String', 'SITE', '"https://eng-test.allforedu.kr"'
             minifyEnabled false
             signingConfig ks ? signingConfigs.release : signingConfigs.debug
         }

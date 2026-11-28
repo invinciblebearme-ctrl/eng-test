@@ -84,6 +84,9 @@ header { display: flex; align-items: center; gap: 10px; }
 .list { padding: 6px; }
 .row { display: grid; grid-template-columns: 1fr repeat(4, 46px); align-items: center; gap: 2px; padding: 9px 10px; border-radius: var(--r-sm); }
 .row + .row { border-top: 1px solid var(--border); }
+button.row { width: 100%; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: var(--r-sm); }
+button.row + button.row { border-top: 1px solid var(--border); }
+button.row:hover, button.row:focus-visible { background: color-mix(in srgb, var(--text) 7%, transparent); }
 .row.head { font-size: 11.5px; color: var(--muted); padding-top: 4px; padding-bottom: 4px; border: 0; }
 .row .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 .row .n.v { color: var(--text); font-weight: 650; }
@@ -180,8 +183,9 @@ function draw() {
   const n = (v, hot) => `<span class="n ${v ? 'v' : ''} ${v && hot ? 'hot' : ''}">${v || '·'}</span>`;
   $('#list').innerHTML = rows.length
     ? `<div class="row head"><span>반</span><span class="n">대기</span><span class="n">AI</span><span class="n">미공개</span><span class="n">오늘</span></div>` +
-      rows.map((c) => `<div class="row"><span class="cls">${c.grade}-${c.class_no}<small>${c.students}명</small></span>${n(c.wait, true)}${n(c.aiSuggest)}${n(c.unpub)}${n(c.today)}</div>`).join('')
+      rows.map((c) => `<button type="button" class="row" data-g="${c.grade}" data-c="${c.class_no}" data-go="${c.wait ? 'wait' : c.unpub ? 'unpub' : 'grades'}" title="${c.grade}학년 ${c.class_no}반 ${c.wait ? '채점 대기' : c.unpub ? '피드백 미공개' : '성적표'} 열기"><span class="cls">${c.grade}-${c.class_no}<small>${c.students}명</small></span>${n(c.wait, true)}${n(c.aiSuggest)}${n(c.unpub)}${n(c.today)}</button>`).join('')
     : '<div class="empty">아직 학생이 없어요</div>';
+  $('#list').querySelectorAll('button.row').forEach((b) => (b.onclick = () => openTeacher(`/teacher?g=${b.dataset.g}&c=${b.dataset.c}&go=${b.dataset.go}`)));
   $('#msg').innerHTML = d.errors24h > 0 ? `<div class="note err">${ICON_WARN}<span>최근 24시간 오류 ${d.errors24h}건 — 교사 화면에서 확인해 주세요</span></div>` : '';
   $('#sub').textContent = `${d.label ? d.label + ' · ' : ''}${timeText(d.at)} 기준`;
   tray(sum(grades.map((g) => g.total)));
@@ -233,16 +237,19 @@ $('#btnSave').onclick = async () => {
 };
 $('#btnClear').onclick = () => { keepInUrl(''); localStorage.removeItem(LS.code); localStorage.removeItem(LS.last); DATA = null; $('#code').value = ''; $('#sub').textContent = '연결 코드를 넣어 주세요'; tray({ wait: 0, aiSuggest: 0, unpub: 0 }); $('#setMsg').innerHTML = `<div class="note ok">${ICON_OK}<span>이 기기에서 코드를 지웠어요. 교사 화면에서도 '끊기'를 눌러 주세요.</span></div>`; };
 // 교사 화면 열기: 데스크탑 앱은 설치한 '영어 교사' 앱(PWA)을 먼저 찾아 열고, 없으면 브라우저로
-$('#btnOpen').onclick = async () => {
-  const u = SITE + '/teacher';
+// path: '/teacher' 또는 반 바로 열기 '/teacher?g=4&c=5&go=wait'
+async function openTeacher(path) {
+  const u = SITE + path;
   if (!TAURI) {
     // 휴대폰에 앱으로 설치한 위젯: 같은 앱 안에서 교사 화면으로 (교사 화면에 '← 위젯' 버튼이 생김)
-    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) { sessionStorage.setItem('engw-from', '1'); location.href = '/teacher'; return; }
+    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) { sessionStorage.setItem('engw-from', '1'); location.href = path; return; }
     window.open(u, '_blank'); return;
   }
-  try { if (await TAURI.core.invoke('open_teacher')) return; } catch {}
+  // 설치한 교사 앱은 시작 주소로만 열려서, 반 바로 열기는 브라우저 주소로
+  if (path === '/teacher') try { if (await TAURI.core.invoke('open_teacher')) return; } catch {}
   if (TAURI.opener) TAURI.opener.openUrl(u).catch(() => {});
-};
+}
+$('#btnOpen').onclick = () => openTeacher('/teacher');
 
 // 앱(Tauri)에서만: 항상 위·자동 실행·알림
 if (TAURI) {

@@ -143,12 +143,22 @@ function login(msg) {
     catch (err) { login(err.message); }
   };
 }
+// 위젯·알림에서 반을 눌러 들어온 주소: /teacher?g=학년&c=반(0=전체)&go=wait(채점 대기)|unpub(피드백 미공개)|grades(성적표)
+function deepLink() {
+  const q = new URLSearchParams(location.search), k = q.get('go'), g = +q.get('g'), c = +q.get('c') || 0;
+  if (!k) return 'grades';
+  history.replaceState(null, '', location.pathname + location.hash); // 새로 고쳐도 다시 이동하지 않게
+  if (g === 3 || g === 4) { GRADE = g; localStorage.setItem('eng4-grade', g); }
+  if (k === 'wait' || k === 'unpub') { RV.cls = c; RV.state = k; RV.set = 'all'; localStorage.setItem('eng4-rvstate', k); return 'review'; }
+  if (c > 0) { CLS = c; localStorage.setItem('eng4-cls', c); }
+  return 'grades';
+}
 async function boot() {
   MEDIA_TOKEN = TOKEN;
   try { KEY = (await T('/api/t/key')).concepts;
     try { for (const v of Object.values((await T('/api/t/roster-check')).classes)) CLASS_COUNT[v.grade] = Math.max(CLASS_COUNT[v.grade] || 0, v.class_no); } catch {} } catch (e) { if (e.status !== 401) app.innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
   await loadClosed();
-  $('#nav').hidden = false; $('#out').hidden = false; $('#themeBtn').hidden = false; $('#widgetBtn').hidden = false; go('grades');
+  $('#nav').hidden = false; $('#out').hidden = false; $('#themeBtn').hidden = false; $('#widgetBtn').hidden = false; go(deepLink());
   // DB 업그레이드 확인 (안 됐으면 저장 기능이 멈추므로 위에 계속 알림)
   T('/api/t/schema').then((r) => { $('#sysSchema').innerHTML = r.ok ? '' : `<div class="notice" role="alert">${ico('warn', 15)} ${esc(r.message)}</div>`; }).catch(() => {});
   checkErrors(); setInterval(() => { if (TOKEN && !document.hidden) checkErrors(); }, 5 * 60000);
